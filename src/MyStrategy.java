@@ -3,17 +3,14 @@ import model.*;
 import java.util.*;
 
 public final class MyStrategy implements Strategy {
-    private static final double WAYPOINT_RADIUS = 100.0D;
 
     private static final double LOW_HP_FACTOR = 0.25D;
+    private static final double SAFE_HP_FACTOR = 0.40D;
+    private static final int STRAFE_PERIOD = 80;
+    private static final double WAYPOINT_RADIUS = 200.0D;
 
-    /**
-     * Ключевые точки для каждой линии, позволяющие упростить управление перемещением волшебника.
-     * <p>
-     * Если всё хорошо, двигаемся к следующей точке и атакуем противников.
-     * Если осталось мало жизненной энергии, отступаем к предыдущей точке.
-     */
     private final Map<LineType, Point2D[]> waypointsByLine = new EnumMap<>(LineType.class);
+    private Faction enemyFaction;
 
     private Random random;
 
@@ -25,145 +22,94 @@ public final class MyStrategy implements Strategy {
     private Game game;
     private Move move;
 
-    /**
-     * Основной метод стратегии, осуществляющий управление волшебником.
-     * Вызывается каждый тик для каждого волшебника.
-     *
-     * @param self  Волшебник, которым данный метод будет осуществлять управление.
-     * @param world Текущее состояние мира.
-     * @param game  Различные игровые константы.
-     * @param move  Результатом работы метода является изменение полей данного объекта.
-     */
     @Override
     public void move(Wizard self, World world, Game game, Move move) {
         initializeStrategy(self, game);
         initializeTick(self, world, game, move);
 
-        // Постоянно двигаемся из-стороны в сторону, чтобы по нам было сложнее попасть.
-        // Считаете, что сможете придумать более эффективный алгоритм уклонения? Попробуйте! ;)
-        move.setStrafeSpeed(random.nextBoolean() ? game.getWizardStrafeSpeed() : -game.getWizardStrafeSpeed());
-
-        // Если осталось мало жизненной энергии, отступаем к предыдущей ключевой точке на линии.
         if (self.getLife() < self.getMaxLife() * LOW_HP_FACTOR) {
             goTo(getPreviousWaypoint());
             return;
         }
 
-        LivingUnit nearestTarget = getNearestTarget();
+        LivingUnit target = getTarget();
 
-        // Если видим противника ...
-        if (nearestTarget != null) {
-            double distance = self.getDistanceTo(nearestTarget);
+        if (target != null) {
+            double distance = self.getDistanceTo(target);
 
-            // ... и он в пределах досягаемости наших заклинаний, ...
             if (distance <= self.getCastRange()) {
-                double angle = self.getAngleTo(nearestTarget);
-
-                // ... то поворачиваемся к цели.
+                double angle = self.getAngleTo(target);
                 move.setTurn(angle);
 
-                // Если цель перед нами, ...
                 if (StrictMath.abs(angle) < game.getStaffSector() / 2.0D) {
-                    // ... то атакуем.
                     move.setAction(ActionType.MAGIC_MISSILE);
                     move.setCastAngle(angle);
-                    move.setMinCastDistance(distance - nearestTarget.getRadius() + game.getMagicMissileRadius());
+                    move.setMinCastDistance(distance - target.getRadius() + game.getMagicMissileRadius());
                 }
+
+                int strafeDirection = world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD ? 1 : -1;
+                move.setStrafeSpeed(strafeDirection * game.getWizardStrafeSpeed());
 
                 return;
             }
         }
 
-        // Если нет других действий, просто продвигаемся вперёд.
-        goTo(getNextWaypoint());
-    }
-
-    /**
-     * Инциализируем стратегию.
-     * <p>
-     * Для этих целей обычно можно использовать конструктор, однако в данном случае мы хотим инициализировать генератор
-     * случайных чисел значением, полученным от симулятора игры.
-     */
-    private void initializeStrategy(Wizard self, Game game) {
-        if (random == null) {
-            random = new Random(game.getRandomSeed());
-
-            double mapSize = game.getMapSize();
-
-            waypointsByLine.put(LineType.MIDDLE, new Point2D[]{
-                    new Point2D(100.0D, mapSize - 100.0D),
-                    random.nextBoolean()
-                            ? new Point2D(600.0D, mapSize - 200.0D)
-                            : new Point2D(200.0D, mapSize - 600.0D),
-                    new Point2D(800.0D, mapSize - 800.0D),
-                    new Point2D(mapSize - 600.0D, 600.0D)
-            });
-
-            waypointsByLine.put(LineType.TOP, new Point2D[]{
-                    new Point2D(100.0D, mapSize - 100.0D),
-                    new Point2D(100.0D, mapSize - 400.0D),
-                    new Point2D(200.0D, mapSize - 800.0D),
-                    new Point2D(200.0D, mapSize * 0.75D),
-                    new Point2D(200.0D, mapSize * 0.5D),
-                    new Point2D(200.0D, mapSize * 0.25D),
-                    new Point2D(200.0D, 200.0D),
-                    new Point2D(mapSize * 0.25D, 200.0D),
-                    new Point2D(mapSize * 0.5D, 200.0D),
-                    new Point2D(mapSize * 0.75D, 200.0D),
-                    new Point2D(mapSize - 200.0D, 200.0D)
-            });
-
-            waypointsByLine.put(LineType.BOTTOM, new Point2D[]{
-                    new Point2D(100.0D, mapSize - 100.0D),
-                    new Point2D(400.0D, mapSize - 100.0D),
-                    new Point2D(800.0D, mapSize - 200.0D),
-                    new Point2D(mapSize * 0.25D, mapSize - 200.0D),
-                    new Point2D(mapSize * 0.5D, mapSize - 200.0D),
-                    new Point2D(mapSize * 0.75D, mapSize - 200.0D),
-                    new Point2D(mapSize - 200.0D, mapSize - 200.0D),
-                    new Point2D(mapSize - 200.0D, mapSize * 0.75D),
-                    new Point2D(mapSize - 200.0D, mapSize * 0.5D),
-                    new Point2D(mapSize - 200.0D, mapSize * 0.25D),
-                    new Point2D(mapSize - 200.0D, 200.0D)
-            });
-
-            switch ((int) self.getId()) {
-                case 1:
-                case 2:
-                case 6:
-                case 7:
-                    line = LineType.TOP;
-                    break;
-                case 3:
-                case 8:
-                    line = LineType.MIDDLE;
-                    break;
-                case 4:
-                case 5:
-                case 9:
-                case 10:
-                    line = LineType.BOTTOM;
-                    break;
-                default:
-            }
-
-            waypoints = waypointsByLine.get(line);
-
-            // Наша стратегия исходит из предположения, что заданные нами ключевые точки упорядочены по убыванию
-            // дальности до последней ключевой точки. Сейчас проверка этого факта отключена, однако вы можете
-            // написать свою проверку, если решите изменить координаты ключевых точек.
-
-            /*Point2D lastWaypoint = waypoints[waypoints.length - 1];
-
-            Preconditions.checkState(ArrayUtils.isSorted(waypoints, (waypointA, waypointB) -> Double.compare(
-                    waypointB.getDistanceTo(lastWaypoint), waypointA.getDistanceTo(lastWaypoint)
-            )));*/
+        if (self.getLife() > self.getMaxLife() * SAFE_HP_FACTOR) {
+            goTo(getNextWaypoint());
         }
     }
 
-    /**
-     * Сохраняем все входные данные в полях класса для упрощения доступа к ним.
-     */
+    private void initializeStrategy(Wizard self, Game game) {
+        if (random != null) {
+            return;
+        }
+        random = new Random(game.getRandomSeed());
+
+        double mapSize = game.getMapSize();
+
+        waypointsByLine.put(LineType.MIDDLE, new Point2D[]{
+                new Point2D(100.0D, mapSize - 100.0D),
+                random.nextBoolean()
+                        ? new Point2D(600.0D, mapSize - 200.0D)
+                        : new Point2D(200.0D, mapSize - 600.0D),
+                new Point2D(800.0D, mapSize - 800.0D),
+                new Point2D(mapSize - 600.0D, 600.0D)
+        });
+
+        waypointsByLine.put(LineType.TOP, new Point2D[]{
+                new Point2D(100.0D, mapSize - 100.0D),
+                new Point2D(100.0D, mapSize - 400.0D),
+                new Point2D(200.0D, mapSize - 800.0D),
+                new Point2D(200.0D, mapSize * 0.75D),
+                new Point2D(200.0D, mapSize * 0.5D),
+                new Point2D(200.0D, mapSize * 0.25D),
+                new Point2D(200.0D, 200.0D),
+                new Point2D(mapSize * 0.25D, 200.0D),
+                new Point2D(mapSize * 0.5D, 200.0D),
+                new Point2D(mapSize * 0.75D, 200.0D),
+                new Point2D(mapSize - 200.0D, 200.0D)
+        });
+
+        waypointsByLine.put(LineType.BOTTOM, new Point2D[]{
+                new Point2D(100.0D, mapSize - 100.0D),
+                new Point2D(400.0D, mapSize - 100.0D),
+                new Point2D(800.0D, mapSize - 200.0D),
+                new Point2D(mapSize * 0.25D, mapSize - 200.0D),
+                new Point2D(mapSize * 0.5D, mapSize - 200.0D),
+                new Point2D(mapSize * 0.75D, mapSize - 200.0D),
+                new Point2D(mapSize - 200.0D, mapSize - 200.0D),
+                new Point2D(mapSize - 200.0D, mapSize * 0.75D),
+                new Point2D(mapSize - 200.0D, mapSize * 0.5D),
+                new Point2D(mapSize - 200.0D, mapSize * 0.25D),
+                new Point2D(mapSize - 200.0D, 200.0D)
+        });
+
+        line = LineType.MIDDLE;
+        waypoints = waypointsByLine.get(line);
+
+        enemyFaction = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
+    }
+
     private void initializeTick(Wizard self, World world, Game game, Move move) {
         this.self = self;
         this.world = world;
@@ -198,10 +144,6 @@ public final class MyStrategy implements Strategy {
         return lastWaypoint;
     }
 
-    /**
-     * Действие данного метода абсолютно идентично действию метода {@code getNextWaypoint}, если перевернуть массив
-     * {@code waypoints}.
-     */
     private Point2D getPreviousWaypoint() {
         Point2D firstWaypoint = waypoints[0];
 
@@ -220,50 +162,49 @@ public final class MyStrategy implements Strategy {
         return firstWaypoint;
     }
 
-    /**
-     * Простейший способ перемещения волшебника.
-     */
     private void goTo(Point2D point) {
-        double angle = self.getAngleTo(point.getX(), point.getY());
-
-        move.setTurn(angle);
-
+        double angle = turnTo(point);
         if (StrictMath.abs(angle) < game.getStaffSector() / 4.0D) {
             move.setSpeed(game.getWizardForwardSpeed());
         }
     }
 
-    /**
-     * Находим ближайшую цель для атаки, независимо от её типа и других характеристик.
-     */
-    private LivingUnit getNearestTarget() {
+    private double turnTo(Point2D point) {
+        double angle = self.getAngleTo(point.getX(), point.getY());
+        move.setTurn(angle);
+        return angle;
+    }
+
+    private LivingUnit getTarget() {
         List<LivingUnit> targets = new ArrayList<>();
         targets.addAll(Arrays.asList(world.getBuildings()));
         targets.addAll(Arrays.asList(world.getWizards()));
         targets.addAll(Arrays.asList(world.getMinions()));
 
-        LivingUnit nearestTarget = null;
-        double nearestTargetDistance = Double.MAX_VALUE;
+        LivingUnit bestTarget = null;
 
         for (LivingUnit target : targets) {
-            if (target.getFaction() == Faction.NEUTRAL || target.getFaction() == self.getFaction()) {
+            if (!isEnemy(target)) {
                 continue;
             }
 
             double distance = self.getDistanceTo(target);
+            if (distance > self.getCastRange()) {
+                continue;
+            }
 
-            if (distance < nearestTargetDistance) {
-                nearestTarget = target;
-                nearestTargetDistance = distance;
+            if (bestTarget == null || target.getLife() < bestTarget.getLife()) {
+                bestTarget = target;
             }
         }
 
-        return nearestTarget;
+        return bestTarget;
     }
 
-    /**
-     * Вспомогательный класс для хранения позиций на карте.
-     */
+    private boolean isEnemy(LivingUnit unit) {
+        return unit.getFaction() == enemyFaction;
+    }
+
     private static final class Point2D {
         private final double x;
         private final double y;
