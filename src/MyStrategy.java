@@ -1,8 +1,10 @@
 import model.ActionType;
+import model.CircularUnit;
 import model.Faction;
 import model.Game;
 import model.LineType;
 import model.LivingUnit;
+import model.Minion;
 import model.Move;
 import model.Unit;
 import model.Wizard;
@@ -24,6 +26,7 @@ public final class MyStrategy implements Strategy {
     private static final double WAYPOINT_RADIUS = 200.0D;
 
     private final Map<LineType, Point2D[]> waypointsByLine = new EnumMap<>(LineType.class);
+    private List<Point2D> points = new ArrayList<>();
     private Faction enemyFaction;
 
     private Random random;
@@ -39,25 +42,32 @@ public final class MyStrategy implements Strategy {
 
     @Override
     public void move(Wizard self, World world, Game game, Move move) {
-        initializeStrategy(self, game);
         initializeTick(self, world, game, move);
+        initializeStrategy();
 
-        if (debug != null) {
-            String coords = self.getX() + " " + self.getY();
-            debug.showText(self.getX(), self.getY(), coords, Color.red);
-            for (Wizard wizard : world.getWizards()) {
-                double radius = wizard.getRadius();
-                debug.drawRect(wizard.getX() - radius, wizard.getY() - radius,
-                        wizard.getX() + radius, wizard.getY() + radius,
-                        Color.black);
+        Point2D bestPoint = new Point2D(self);
+        double bestPointScore = scorePoint(bestPoint);
+        for (Point2D point : points) {
+            if (point.getDistanceTo(self) > 500) {
+                continue;
             }
-            debug.drawBeforeScene();
+
+            double pointScore = scorePoint(point);
+            if (pointScore > bestPointScore) {
+                bestPoint = point;
+                bestPointScore = pointScore;
+            }
+
+            debug.fillCircle(point.getX(), point.getY(), 3, Color.gray);
+            debug.showText(point.getX(), point.getY(), ((Number) (int) pointScore).toString(), Color.black);
         }
+        debug.drawBeforeScene();
 
         if (debug != null && world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD) {
             debug.showText(self.getX(), self.getY(), "Move!", Color.blue);
         }
         if (debug != null) {
+            debug.fillCircle(bestPoint.getX(), bestPoint.getY(), 6, Color.red);
             debug.drawAfterScene();
         }
 
@@ -89,11 +99,66 @@ public final class MyStrategy implements Strategy {
         }
 
         if (self.getLife() > self.getMaxLife() * SAFE_HP_FACTOR) {
-            goTo(getNextWaypoint());
+            goTo(bestPoint);
         }
     }
 
-    private void initializeStrategy(Wizard self, Game game) {
+    private double scorePoint(Point2D point) {
+        for (CircularUnit unit : world.getTrees()) {
+            if (point.isCoveredBy(unit)) {
+                return -999;
+            }
+        }
+        for (CircularUnit unit : world.getBuildings()) {
+            if (point.isCoveredBy(unit)) {
+                return -999;
+            }
+        }
+        double score = 0;
+        for (Wizard wizard : world.getWizards()) {
+            if (wizard.isMe()) {
+                continue;
+            }
+            double distance = point.getDistanceTo(wizard);
+            double distanceRatio = distance / wizard.getRadius();
+            if (isAlly(wizard)) {
+                score -= distanceRatio;
+            }
+            if (isEnemy(wizard)) {
+                //score -= distanceRatio;
+            }
+        }
+        for (Minion minion : world.getMinions()) {
+            double distance = point.getDistanceTo(minion);
+            double distanceRatio = distance / minion.getRadius();
+            if (isAlly(minion)) {
+                score -= distanceRatio;
+            }
+            if (isEnemy(minion)) {
+                //score -= distanceRatio;
+            }
+        }
+        return score;
+    }
+
+    private List<Point2D> getPointsAroundSelf() {
+        int depth = 3;
+        double hexagonSize = self.getRadius();
+        List<Point2D> points = new ArrayList<>();
+        for (int q = -depth; q <= depth; ++q) {
+            for (int r = -depth; r <= depth; ++r) {
+                int s = -q - r;
+                if (-depth <= s && s <= depth) {
+                    double x = hexagonSize * 3 / 2 * q;
+                    double y = hexagonSize * StrictMath.sqrt(3) * (r + (double) q / 2);
+                    points.add(new Point2D(self.getX() + x, self.getY() + y));
+                }
+            }
+        }
+        return points;
+    }
+
+    private void initializeStrategy() {
         if (random != null) {
             return;
         }
@@ -152,6 +217,23 @@ public final class MyStrategy implements Strategy {
         waypoints = waypointsByLine.get(line);
 
         enemyFaction = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
+
+        points = getPoints();
+    }
+
+    private List<Point2D> getPoints() {
+        List<Point2D> points = new ArrayList<>();
+        double hexagonSize = game.getWizardRadius();
+        for (int q = 0; q < 100; ++q) {
+            for (int r = 0; r < 100; ++r) {
+                double x = hexagonSize * 3 / 2 * q;
+                double y = hexagonSize * StrictMath.sqrt(3) * (r + (double) q / 2);
+                if (0 < x && x < world.getWidth() && 0 < y && y < world.getHeight()) { // TODO: Figure out width and height.
+                    points.add(new Point2D(x, y));
+                }
+            }
+        }
+        return points;
     }
 
     private void initializeTick(Wizard self, World world, Game game, Move move) {
@@ -249,6 +331,10 @@ public final class MyStrategy implements Strategy {
         return unit.getFaction() == enemyFaction;
     }
 
+    private boolean isAlly(LivingUnit unit) {
+        return unit.getFaction() == self.getFaction();
+    }
+
     private static final class Point2D {
         private final double x;
         private final double y;
@@ -256,6 +342,10 @@ public final class MyStrategy implements Strategy {
         private Point2D(double x, double y) {
             this.x = x;
             this.y = y;
+        }
+
+        private Point2D(Unit unit) {
+            this(unit.getX(), unit.getY());
         }
 
         public double getX() {
@@ -277,16 +367,27 @@ public final class MyStrategy implements Strategy {
         public double getDistanceTo(Unit unit) {
             return getDistanceTo(unit.getX(), unit.getY());
         }
+
+        public boolean isCoveredBy(CircularUnit unit) {
+            return getDistanceTo(unit) <= unit.getRadius();
+        }
     }
 
     public interface Visualizer {
         public void drawBeforeScene();
+
         public void drawAfterScene();
+
         public void drawCircle(double x, double y, double r, Color color);
+
         public void fillCircle(double x, double y, double r, Color color);
+
         public void drawRect(double x1, double y1, double x2, double y2, Color color);
+
         public void fillRect(double x1, double y1, double x2, double y2, Color color);
+
         public void drawLine(double x1, double y1, double x2, double y2, Color color);
+
         public void showText(double x, double y, String msg, Color color);
     }
 }
