@@ -42,9 +42,8 @@ public final class MyStrategy implements Strategy {
         initializeStrategy(self, game);
         initializeTick(self, world, game, move);
 
-        String coords = self.getX() + " " + self.getY();
-        System.out.println("I'm at " + coords);
         if (debug != null) {
+            String coords = self.getX() + " " + self.getY();
             debug.showText(self.getX(), self.getY(), coords, Color.red);
             for (Wizard wizard : world.getWizards()) {
                 double radius = wizard.getRadius();
@@ -53,6 +52,13 @@ public final class MyStrategy implements Strategy {
                         Color.black);
             }
             debug.drawBeforeScene();
+        }
+
+        if (debug != null && world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD) {
+            debug.showText(self.getX(), self.getY(), "Move!", Color.blue);
+        }
+        if (debug != null) {
+            debug.drawAfterScene();
         }
 
         if (self.getLife() < self.getMaxLife() * LOW_HP_FACTOR) {
