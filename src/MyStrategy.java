@@ -58,10 +58,14 @@ public final class MyStrategy implements Strategy {
                 bestPointScore = pointScore;
             }
 
-            debug.fillCircle(point.getX(), point.getY(), 3, Color.gray);
-            debug.showText(point.getX(), point.getY(), ((Number) (int) pointScore).toString(), Color.black);
+            if (debug != null) {
+                debug.fillCircle(point.getX(), point.getY(), 3, Color.gray);
+                debug.showText(point.getX(), point.getY(), ((Number) (int) pointScore).toString(), Color.black);
+            }
         }
-        debug.drawBeforeScene();
+        if (debug != null) {
+            debug.drawBeforeScene();
+        }
 
         if (debug != null && world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD) {
             debug.showText(self.getX(), self.getY(), "Move!", Color.blue);
