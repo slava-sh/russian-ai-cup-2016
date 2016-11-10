@@ -1,7 +1,20 @@
-import model.*;
+import model.ActionType;
+import model.Faction;
+import model.Game;
+import model.LineType;
+import model.LivingUnit;
+import model.Move;
+import model.Unit;
+import model.Wizard;
+import model.World;
 
 import java.awt.Color;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 public final class MyStrategy implements Strategy {
 
@@ -29,16 +42,17 @@ public final class MyStrategy implements Strategy {
         initializeStrategy(self, game);
         initializeTick(self, world, game, move);
 
+        String coords = self.getX() + " " + self.getY();
+        System.out.println("I'm at " + coords);
         if (debug != null) {
-            debug.beginPre();
-            debug.text(self.getX(), self.getY(), "hello", Color.red);
+            debug.showText(self.getX(), self.getY(), coords, Color.red);
             for (Wizard wizard : world.getWizards()) {
                 double radius = wizard.getRadius();
-                debug.rect(wizard.getX() - radius, wizard.getY() - radius,
-                           wizard.getX() + radius, wizard.getY() + radius,
-                           Color.black);
+                debug.drawRect(wizard.getX() - radius, wizard.getY() - radius,
+                        wizard.getX() + radius, wizard.getY() + radius,
+                        Color.black);
             }
-            debug.endPre();
+            debug.drawBeforeScene();
         }
 
         if (self.getLife() < self.getMaxLife() * LOW_HP_FACTOR) {
@@ -260,16 +274,13 @@ public final class MyStrategy implements Strategy {
     }
 
     public interface Visualizer {
-        void beginPre();
-        void beginPost();
-        void endPre();
-        void endPost();
-        void circle(double x, double y, double r, Color color);
-        void fillCircle(double x, double y, double r, Color color);
-        void rect(double x1, double y1, double x2, double y2, Color color);
-        void fillRect(double x1, double y1, double x2, double y2, Color color);
-        void line(double x1, double y1, double x2, double y2, Color color);
-        void text(double x, double y, String msg, Color color);
-        void stop();
+        public void drawBeforeScene();
+        public void drawAfterScene();
+        public void drawCircle(double x, double y, double r, Color color);
+        public void fillCircle(double x, double y, double r, Color color);
+        public void drawRect(double x1, double y1, double x2, double y2, Color color);
+        public void fillRect(double x1, double y1, double x2, double y2, Color color);
+        public void drawLine(double x1, double y1, double x2, double y2, Color color);
+        public void showText(double x, double y, String msg, Color color);
     }
 }
