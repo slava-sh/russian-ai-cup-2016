@@ -1,7 +1,11 @@
 strategy:
-	mkdir -p ./out/classes
-	javac -sourcepath ./src -d ./out/classes ./src/Runner.java
-	jar cf ./out/strategy.jar -C ./out/classes .
+	mkdir -p ./out/strategy
+	javac -d ./out/strategy -sourcepath ./src ./src/{Runner,DebugVisualizer}.java
+	jar cf ./out/strategy.jar -C ./out/strategy .
+
+plugin:
+	mkdir -p ./out/plugin
+	javac -d ./out/plugin -sourcepath ./src ./src/LocalTestRendererListener.java
 
 run-simulator:
 	java -Xms512m -Xmx2G -server -jar ./vendor/local-runner/local-runner.jar \

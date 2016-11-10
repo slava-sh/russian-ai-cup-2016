@@ -1,0 +1,1 @@
+../vendor/russian-ai-cup-visual/local-runner/plugins/LocalTestRendererListener.java

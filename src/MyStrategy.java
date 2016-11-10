@@ -1,5 +1,6 @@
 import model.*;
 
+import java.awt.Color;
 import java.util.*;
 
 public final class MyStrategy implements Strategy {
@@ -13,6 +14,7 @@ public final class MyStrategy implements Strategy {
     private Faction enemyFaction;
 
     private Random random;
+    private Visualizer debug;
 
     private LineType line;
     private Point2D[] waypoints;
@@ -26,6 +28,18 @@ public final class MyStrategy implements Strategy {
     public void move(Wizard self, World world, Game game, Move move) {
         initializeStrategy(self, game);
         initializeTick(self, world, game, move);
+
+        if (debug != null) {
+            debug.beginPre();
+            debug.text(self.getX(), self.getY(), "hello", Color.red);
+            for (Wizard wizard : world.getWizards()) {
+                double radius = wizard.getRadius();
+                debug.rect(wizard.getX() - radius, wizard.getY() - radius,
+                           wizard.getX() + radius, wizard.getY() + radius,
+                           Color.black);
+            }
+            debug.endPre();
+        }
 
         if (self.getLife() < self.getMaxLife() * LOW_HP_FACTOR) {
             goTo(getPreviousWaypoint());
@@ -64,6 +78,16 @@ public final class MyStrategy implements Strategy {
             return;
         }
         random = new Random(game.getRandomSeed());
+
+        try {
+            Class<?> klass = Class.forName("DebugVisualizer");
+            Object instance = klass.getConstructor().newInstance();
+            debug = (Visualizer) instance;
+        } catch (ClassNotFoundException e) {
+            // Visualizer is not available.
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
         double mapSize = game.getMapSize();
 
@@ -233,5 +257,19 @@ public final class MyStrategy implements Strategy {
         public double getDistanceTo(Unit unit) {
             return getDistanceTo(unit.getX(), unit.getY());
         }
+    }
+
+    public interface Visualizer {
+        void beginPre();
+        void beginPost();
+        void endPre();
+        void endPost();
+        void circle(double x, double y, double r, Color color);
+        void fillCircle(double x, double y, double r, Color color);
+        void rect(double x1, double y1, double x2, double y2, Color color);
+        void fillRect(double x1, double y1, double x2, double y2, Color color);
+        void line(double x1, double y1, double x2, double y2, Color color);
+        void text(double x, double y, String msg, Color color);
+        void stop();
     }
 }
