@@ -58,7 +58,7 @@ public final class MyStrategy implements Strategy {
     double bestScore = 0;
     double worstScore = 0;
     for (MapPoint point : map.values()) {
-      if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
+      if (point.getDistanceTo(self) > self.getVisionRange()) {
         continue;
       }
       double score = scorePoint(point);
@@ -86,10 +86,6 @@ public final class MyStrategy implements Strategy {
 
       for (MapPoint point : map.values()) {
         if (point.getDistanceTo(self) > self.getVisionRange()) {
-          continue;
-        }
-        if (!point.isReachable()) {
-          debug.drawCircle(point.getX(), point.getY(), 3, Color.gray);
           continue;
         }
         double score = scorePoint(point);
@@ -174,7 +170,7 @@ public final class MyStrategy implements Strategy {
         break;
       }
       for (MapPoint neighbor : point.getNeighbors()) {
-        if (neighbor.isReachable() && !prev.containsKey(neighbor)) {
+        if (!prev.containsKey(neighbor)) {
           prev.put(neighbor, point);
           queue.add(neighbor);
         }
@@ -196,25 +192,6 @@ public final class MyStrategy implements Strategy {
   private void updateMap() {
     if (map == null) {
       map = createMap();
-      updateReachability(); // TODO: Remove unreachable points.
-    }
-  }
-
-  private void updateReachability() {
-    List<LivingUnit> units = new ArrayList<>();
-    units.addAll(Arrays.asList(world.getTrees()));
-    units.addAll(Arrays.asList(world.getBuildings()));
-    //units.addAll(Arrays.asList(world.getWizards()));
-    //units.addAll(Arrays.asList(world.getMinions()));
-    for (MapPoint point : map.values()) {
-      boolean isReachable = true;
-      for (LivingUnit unit : units) { // TODO: Convert Point2D to Hex and find neighbors instead.
-        if (point.getDistanceTo(unit) < self.getRadius() + unit.getRadius()) {
-          isReachable = false;
-          break;
-        }
-      }
-      point.setReachable(isReachable);
     }
   }
 
@@ -311,8 +288,8 @@ public final class MyStrategy implements Strategy {
   private Map<HexPoint, MapPoint> createMap() {
     Map<HexPoint, MapPoint> map = new HashMap<>();
     double radius = self.getRadius();
-    for (int q = 0; q < 300; ++q) {
-      for (int r = 0; r < 300; ++r) {
+    for (int q = 0; q < 600; ++q) {
+      for (int r = 0; r < 600; ++r) {
         Point2D point = hexToPixel(q, r);
         if (radius < point.getX()
             && point.getX() < world.getWidth() - radius
@@ -322,6 +299,23 @@ public final class MyStrategy implements Strategy {
         }
       }
     }
+
+    List<LivingUnit> obstacles = new ArrayList<>();
+    obstacles.addAll(Arrays.asList(world.getTrees()));
+    obstacles.addAll(Arrays.asList(world.getBuildings()));
+    map.values()
+        .removeIf(
+            point -> {
+              boolean isReachable = true;
+              for (LivingUnit unit : obstacles) {
+                // TODO: Convert Point2D to Hex and find neighbors instead.
+                if (point.getDistanceTo(unit) < self.getRadius() + unit.getRadius()) {
+                  isReachable = false;
+                  break;
+                }
+              }
+              return !isReachable;
+            });
 
     for (Map.Entry<HexPoint, MapPoint> entry : map.entrySet()) {
       int q = entry.getKey().getQ();
@@ -449,19 +443,10 @@ public final class MyStrategy implements Strategy {
   }
 
   private static class MapPoint extends Point2D {
-    private boolean isReachable;
     private List<MapPoint> neighbors;
 
     public MapPoint(Point2D point) {
       super(point.getX(), point.getY());
-    }
-
-    public boolean isReachable() {
-      return isReachable;
-    }
-
-    public void setReachable(boolean reachable) {
-      isReachable = reachable;
     }
 
     public List<MapPoint> getNeighbors() {
