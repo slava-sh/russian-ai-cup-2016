@@ -77,7 +77,7 @@ public final class MyStrategy implements Strategy {
 
     MapPoint currentPoint = map.get(pixelToHex(self.getX(), self.getY()));
     List<MapPoint> path = findPath(currentPoint, bestPoint);
-    MapPoint nextPoint = path.size() >= 1 ? path.get(1) : currentPoint;
+    MapPoint nextPoint = path.size() > 1 ? path.get(1) : currentPoint;
 
     if (debug != null) {
       drawHexTile(nextPoint, Color.blue);
@@ -117,19 +117,13 @@ public final class MyStrategy implements Strategy {
     LivingUnit target = getTarget();
     if (target != null) {
       double distance = self.getDistanceTo(target);
-
       if (distance <= self.getCastRange()) {
         double angle = self.getAngleTo(target);
-        move.setTurn(angle);
-
         if (StrictMath.abs(angle) < game.getStaffSector() / 2.0D) {
           move.setAction(ActionType.MAGIC_MISSILE);
           move.setCastAngle(angle);
           move.setMinCastDistance(distance - target.getRadius() + game.getMagicMissileRadius());
         }
-
-        int strafeDirection = world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD ? 1 : -1;
-        move.setStrafeSpeed(strafeDirection * game.getWizardStrafeSpeed());
       }
     }
   }
