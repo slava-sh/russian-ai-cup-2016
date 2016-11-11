@@ -1,8 +1,6 @@
 import model.ActionType;
-import model.CircularUnit;
 import model.Faction;
 import model.Game;
-import model.LineType;
 import model.LivingUnit;
 import model.Minion;
 import model.MinionType;
@@ -15,7 +13,6 @@ import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,8 +30,10 @@ public final class MyStrategy implements Strategy {
             new HexPoint(-1, 1),
             new HexPoint(0, 1)));
 
+    private double HEXAGON_SIZE;
+
     private List<MapPoint> map;
-    private Faction enemyFaction;
+    private Faction ENEMY_FRACTION;
 
     private Random random;
     private Visualizer debug;
@@ -48,12 +47,13 @@ public final class MyStrategy implements Strategy {
     public void move(Wizard self, World world, Game game, Move move) {
         initializeTick(self, world, game, move);
         initializeStrategy();
+        updateMap();
 
         MapPoint bestPoint = null;
         double bestScore = 0;
         double worstScore = 0;
         for (MapPoint point : map) {
-            if (point.getDistanceTo(self) > self.getVisionRange()) {
+            if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
                 continue;
             }
             double score = scorePoint(point);
@@ -75,9 +75,14 @@ public final class MyStrategy implements Strategy {
                 if (point.getDistanceTo(self) > self.getVisionRange()) {
                     continue;
                 }
+                if (!point.isReachable()) {
+                    debug.drawCircle(point.getX(), point.getY(), 3, Color.gray);
+                    continue;
+                }
                 double score = scorePoint(point);
                 double normedScore = Math.max(0.3, (score - worstScore) / (bestScore - worstScore));
-                Color color = new Color((float) (1 - normedScore), (float) 1, (float) (1 - normedScore));
+                double clampedComplement = Math.max(0, Math.min(1, 1 - normedScore));
+                Color color = new Color((float) clampedComplement, 1f, (float) clampedComplement);
                 debug.fillCircle(point.getX(), point.getY(), 3, color);
             }
 
@@ -124,6 +129,31 @@ public final class MyStrategy implements Strategy {
                 int strafeDirection = world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD ? 1 : -1;
                 move.setStrafeSpeed(strafeDirection * game.getWizardStrafeSpeed());
             }
+        }
+    }
+
+    private void updateMap() {
+        if (map == null) {
+            map = createMap();
+            updateReachability(); // TODO: Remove unreachable points.
+        }
+    }
+
+    private void updateReachability() {
+        List<LivingUnit> units = new ArrayList<>();
+        units.addAll(Arrays.asList(world.getTrees()));
+        units.addAll(Arrays.asList(world.getBuildings()));
+        //units.addAll(Arrays.asList(world.getWizards()));
+        //units.addAll(Arrays.asList(world.getMinions()));
+        for (MapPoint point : map) {
+            boolean isReachable = true;
+            for (LivingUnit unit : units) {
+                if (point.getDistanceTo(unit) < self.getRadius() + unit.getRadius()) {
+                    isReachable = false;
+                    break;
+                }
+            }
+            point.setReachable(isReachable);
         }
     }
 
@@ -183,15 +213,12 @@ public final class MyStrategy implements Strategy {
             throw new RuntimeException(e);
         }
 
-        double mapSize = game.getMapSize();
+        ENEMY_FRACTION = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
 
-        enemyFaction = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
-
-        map = createMap();
+        HEXAGON_SIZE = 20;
     }
 
     private Point2D hexToPixel(double q, double r) {
-        final double HEXAGON_SIZE = game.getWizardRadius();
         double x = HEXAGON_SIZE * 3 / 2 * q;
         double y = HEXAGON_SIZE * StrictMath.sqrt(3) * (r + q / 2);
         return new Point2D(x, y);
@@ -200,8 +227,8 @@ public final class MyStrategy implements Strategy {
     private List<MapPoint> createMap() {
         Map<HexPoint, MapPoint> points = new HashMap<>();
         double radius = self.getRadius();
-        for (int q = 0; q < 100; ++q) {
-            for (int r = 0; r < 100; ++r) {
+        for (int q = 0; q < 300; ++q) {
+            for (int r = 0; r < 300; ++r) {
                 Point2D point = hexToPixel(q, r);
                 if (radius < point.getX() && point.getX() < world.getWidth() - radius &&
                         radius < point.getY() && point.getY() < world.getHeight() - radius) {
@@ -209,10 +236,12 @@ public final class MyStrategy implements Strategy {
                 }
             }
         }
+
         for (Map.Entry<HexPoint, MapPoint> entry : points.entrySet()) {
             int q = entry.getKey().getQ();
             int r = entry.getKey().getR();
             MapPoint point = entry.getValue();
+
             List<MapPoint> neighbors = new ArrayList<>();
             for (HexPoint delta : HEX_DIRECTIONS) {
                 MapPoint neighbor = points.get(new HexPoint(q + delta.q, r + delta.r));
@@ -223,6 +252,7 @@ public final class MyStrategy implements Strategy {
             }
             point.setNeighbors(neighbors);
         }
+
         return Collections.unmodifiableList(new ArrayList<>(points.values()));
     }
 
@@ -273,7 +303,7 @@ public final class MyStrategy implements Strategy {
     }
 
     private boolean isEnemy(LivingUnit unit) {
-        return unit.getFaction() == enemyFaction;
+        return unit.getFaction() == ENEMY_FRACTION;
     }
 
     private boolean isAlly(LivingUnit unit) {
