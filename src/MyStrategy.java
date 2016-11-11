@@ -52,7 +52,6 @@ public final class MyStrategy implements Strategy {
   public void move(Wizard self, World world, Game game, Move move) {
     initializeTick(self, world, game, move);
     initializeStrategy();
-    updateMap();
 
     MapPoint bestPoint = null;
     double bestScore = 0;
@@ -183,12 +182,6 @@ public final class MyStrategy implements Strategy {
     return path;
   }
 
-  private void updateMap() {
-    if (map == null) {
-      map = createMap();
-    }
-  }
-
   private double scorePoint(Point2D point) {
     double score = 0;
     for (Wizard wizard : world.getWizards()) {
@@ -252,7 +245,9 @@ public final class MyStrategy implements Strategy {
 
     ENEMY_FRACTION = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
 
-    HEXAGON_SIZE = 20;
+    HEXAGON_SIZE = self.getRadius();
+
+    map = createMap();
   }
 
   private Point2D hexToPixel(double q, double r) {
@@ -281,35 +276,30 @@ public final class MyStrategy implements Strategy {
 
   private Map<HexPoint, MapPoint> createMap() {
     Map<HexPoint, MapPoint> map = new HashMap<>();
+    List<LivingUnit> obstacles = new ArrayList<>();
+    obstacles.addAll(Arrays.asList(world.getTrees()));
+    obstacles.addAll(Arrays.asList(world.getBuildings()));
     double radius = self.getRadius();
-    for (int q = 0; q < 600; ++q) {
-      for (int r = 0; r < 600; ++r) {
+    for (int q = -100; q <= 100; ++q) {
+      for (int r = -100; r <= 100; ++r) {
         Point2D point = hexToPixel(q, r);
         if (radius < point.getX()
             && point.getX() < world.getWidth() - radius
             && radius < point.getY()
             && point.getY() < world.getHeight() - radius) {
-          map.put(new HexPoint(q, r), new MapPoint(point));
+          boolean isReachable = true;
+          for (LivingUnit obstacle : obstacles) {
+            if (point.getDistanceTo(obstacle) < radius + obstacle.getRadius()) {
+              isReachable = false;
+              break;
+            }
+          }
+          if (isReachable) {
+            map.put(pixelToHex(point.getX(), point.getY()), new MapPoint(point));
+          }
         }
       }
     }
-
-    List<LivingUnit> obstacles = new ArrayList<>();
-    obstacles.addAll(Arrays.asList(world.getTrees()));
-    obstacles.addAll(Arrays.asList(world.getBuildings()));
-    map.values()
-        .removeIf(
-            point -> {
-              boolean isReachable = true;
-              for (LivingUnit unit : obstacles) {
-                // TODO: Convert Point2D to Hex and find neighbors instead.
-                if (point.getDistanceTo(unit) < self.getRadius() + unit.getRadius()) {
-                  isReachable = false;
-                  break;
-                }
-              }
-              return !isReachable;
-            });
 
     for (Map.Entry<HexPoint, MapPoint> entry : map.entrySet()) {
       int q = entry.getKey().getQ();
@@ -451,7 +441,7 @@ public final class MyStrategy implements Strategy {
       if (this.neighbors != null) {
         throw new RuntimeException("Neighbors already set.");
       }
-      this.neighbors = neighbors;
+      this.neighbors = Collections.unmodifiableList(neighbors);
     }
   }
 
