@@ -185,7 +185,11 @@ public final class MyStrategy implements Strategy {
                 if (-depth <= s && s <= depth) {
                     double x = hexagonSize * 3 / 2 * q;
                     double y = hexagonSize * StrictMath.sqrt(3) * (r + (double) q / 2);
-                    points.add(new Point2D(self.getX() + x, self.getY() + y));
+                    Point2D point = new Point2D(self.getX() + x, self.getY() + y);
+                    if (isPermanentlyUnreacheble(point)) {
+                        continue;
+                    }
+                    points.add(point);
                 }
             }
         }
