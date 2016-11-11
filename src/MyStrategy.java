@@ -5,6 +5,7 @@ import model.Game;
 import model.LineType;
 import model.LivingUnit;
 import model.Minion;
+import model.MinionType;
 import model.Move;
 import model.Unit;
 import model.Wizard;
@@ -17,6 +18,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.stream.Stream;
 
 public final class MyStrategy implements Strategy {
 
@@ -46,22 +48,38 @@ public final class MyStrategy implements Strategy {
         initializeStrategy();
 
         Point2D bestPoint = new Point2D(self);
-        double bestPointScore = scorePoint(bestPoint);
+        double bestScore = scorePoint(bestPoint);
+        double worstScore = bestScore;
         for (Point2D point : points) {
-            if (point.getDistanceTo(self) > 500) {
+            if (point.getDistanceTo(self) > self.getVisionRange()) {
                 continue;
             }
-
-            double pointScore = scorePoint(point);
-            if (pointScore > bestPointScore) {
+            double score = scorePoint(point);
+            worstScore = StrictMath.min(worstScore, score);
+            if (score > bestScore) {
                 bestPoint = point;
-                bestPointScore = pointScore;
+                bestScore = score;
             }
-
-            debug.fillCircle(point.getX(), point.getY(), 3, Color.gray);
-            debug.showText(point.getX(), point.getY(), ((Number) (int) pointScore).toString(), Color.black);
         }
-        debug.drawBeforeScene();
+        for (Point2D point : points) {
+            if (point.getDistanceTo(self) > self.getVisionRange()) {
+                continue;
+            }
+            double score = scorePoint(point);
+            double normedScore = (score - worstScore) / (bestScore - worstScore);
+            Color color = new Color((float) (1 - normedScore), (float) 1, (float) (1 - normedScore));
+            debug.fillCircle(point.getX(), point.getY(), 3, color);
+        }
+
+        if (debug != null) {
+            for (Wizard wizard : world.getWizards()) {
+                if (wizard.isMaster()) {
+                    double radius = 8;
+                    debug.fillRect(wizard.getX() - radius, wizard.getY() - radius, wizard.getX() + radius, wizard.getY() + radius, Color.red);
+                }
+            }
+            debug.drawBeforeScene();
+        }
 
         if (debug != null && world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD) {
             debug.showText(self.getX(), self.getY(), "Move!", Color.blue);
@@ -103,39 +121,55 @@ public final class MyStrategy implements Strategy {
         }
     }
 
-    private double scorePoint(Point2D point) {
+    private boolean isPermanentlyUnreacheble(Point2D point) {
         for (CircularUnit unit : world.getTrees()) {
             if (point.isCoveredBy(unit)) {
-                return -999;
+                return true;
             }
         }
         for (CircularUnit unit : world.getBuildings()) {
             if (point.isCoveredBy(unit)) {
-                return -999;
+                return true;
             }
         }
+        return false;
+    }
+
+    private double scorePoint(Point2D point) {
         double score = 0;
         for (Wizard wizard : world.getWizards()) {
-            if (wizard.isMe()) {
-                continue;
-            }
             double distance = point.getDistanceTo(wizard);
-            double distanceRatio = distance / wizard.getRadius();
-            if (isAlly(wizard)) {
-                score -= distanceRatio;
+
+            if (wizard.isMaster() && distance < wizard.getVisionRange() / 3) {
+                double MASTER_VISION_RANGE_FACTOR = 50;
+                score += MASTER_VISION_RANGE_FACTOR;
             }
-            if (isEnemy(wizard)) {
-                //score -= distanceRatio;
+
+            if (isAlly(wizard) && !wizard.isMe()) {
+                if (distance < wizard.getCastRange()) {
+                    if (StrictMath.abs(wizard.getAngleTo(point.getX(), point.getY())) < StrictMath.PI / 4) { // TODO: Discount for rotation time.
+                        double ALLY_WIZARD_CAST_RANGE_FACTOR = 10;
+                        score += ALLY_WIZARD_CAST_RANGE_FACTOR;
+                    }
+                }
             }
         }
         for (Minion minion : world.getMinions()) {
             double distance = point.getDistanceTo(minion);
-            double distanceRatio = distance / minion.getRadius();
             if (isAlly(minion)) {
-                score -= distanceRatio;
-            }
-            if (isEnemy(minion)) {
-                //score -= distanceRatio;
+                double angle = minion.getAngleTo(point.getX(), point.getY());
+                if (minion.getType() == MinionType.ORC_WOODCUTTER && distance < game.getOrcWoodcutterAttackRange()) {
+                    if (StrictMath.abs(angle) < game.getOrcWoodcutterAttackSector() / 2 * 2) { // TODO: Discount for rotation time.
+                        double ALLY_WOODCUTTER_ATTACK_RANGE_FACTOR = 5;
+                        score += ALLY_WOODCUTTER_ATTACK_RANGE_FACTOR;
+                    }
+                }
+                if (minion.getType() == MinionType.FETISH_BLOWDART && distance < game.getFetishBlowdartAttackRange()) {
+                    if (StrictMath.abs(angle) < game.getFetishBlowdartAttackSector() / 2 * 2) { // TODO: Discount for rotation time.
+                        double ALLY_FETISH_ATTACK_RANGE_FACTOR = 5;
+                        score += ALLY_FETISH_ATTACK_RANGE_FACTOR;
+                    }
+                }
             }
         }
         return score;
