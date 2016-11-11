@@ -14,28 +14,30 @@ import model.World;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.stream.Stream;
 
 public final class MyStrategy implements Strategy {
 
-    private static final double LOW_HP_FACTOR = 0.25D;
-    private static final double SAFE_HP_FACTOR = 0.40D;
     private static final int STRAFE_PERIOD = 80;
-    private static final double WAYPOINT_RADIUS = 200.0D;
 
-    private final Map<LineType, Point2D[]> waypointsByLine = new EnumMap<>(LineType.class);
-    private List<Point2D> points = new ArrayList<>();
+    private static final List<HexPoint> HEX_DIRECTIONS = Collections.unmodifiableList(Arrays.asList(
+            new HexPoint(1, 0),
+            new HexPoint(1, -1),
+            new HexPoint(0, -1),
+            new HexPoint(-1, 0),
+            new HexPoint(-1, 1),
+            new HexPoint(0, 1)));
+
+    private List<MapPoint> map;
     private Faction enemyFaction;
 
     private Random random;
     private Visualizer debug;
-
-    private LineType line;
-    private Point2D[] waypoints;
 
     private Wizard self;
     private World world;
@@ -47,55 +49,65 @@ public final class MyStrategy implements Strategy {
         initializeTick(self, world, game, move);
         initializeStrategy();
 
-        Point2D bestPoint = new Point2D(self);
-        double bestScore = scorePoint(bestPoint);
-        double worstScore = bestScore;
-        for (Point2D point : points) {
+        MapPoint bestPoint = null;
+        double bestScore = 0;
+        double worstScore = 0;
+        for (MapPoint point : map) {
             if (point.getDistanceTo(self) > self.getVisionRange()) {
                 continue;
             }
             double score = scorePoint(point);
-            worstScore = StrictMath.min(worstScore, score);
-            if (score > bestScore) {
+            if (bestPoint == null) {
                 bestPoint = point;
                 bestScore = score;
+                worstScore = score;
+            } else {
+                worstScore = StrictMath.min(worstScore, score);
+                if (score > bestScore) {
+                    bestPoint = point;
+                    bestScore = score;
+                }
             }
-        }
-        for (Point2D point : points) {
-            if (point.getDistanceTo(self) > self.getVisionRange()) {
-                continue;
-            }
-            double score = scorePoint(point);
-            double normedScore = (score - worstScore) / (bestScore - worstScore);
-            Color color = new Color((float) (1 - normedScore), (float) 1, (float) (1 - normedScore));
-            debug.fillCircle(point.getX(), point.getY(), 3, color);
         }
 
         if (debug != null) {
+            for (MapPoint point : map) {
+                if (point.getDistanceTo(self) > self.getVisionRange()) {
+                    continue;
+                }
+                double score = scorePoint(point);
+                double normedScore = Math.max(0.3, (score - worstScore) / (bestScore - worstScore));
+                Color color = new Color((float) (1 - normedScore), (float) 1, (float) (1 - normedScore));
+                debug.fillCircle(point.getX(), point.getY(), 3, color);
+            }
+
+            debug.drawCircle(self.getX(), self.getY(), self.getVisionRange(), Color.lightGray);
+
             for (Wizard wizard : world.getWizards()) {
                 if (wizard.isMaster()) {
-                    double radius = 8;
-                    debug.fillRect(wizard.getX() - radius, wizard.getY() - radius, wizard.getX() + radius, wizard.getY() + radius, Color.red);
+                    double r = wizard.getRadius() / 2;
+                    debug.fillRect(
+                            wizard.getX() - r, wizard.getY() - r,
+                            wizard.getX() + r, wizard.getY() + r,
+                            Color.red);
                 }
             }
+
             debug.drawBeforeScene();
         }
 
-        if (debug != null && world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD) {
-            debug.showText(self.getX(), self.getY(), "Move!", Color.blue);
-        }
         if (debug != null) {
-            debug.fillCircle(bestPoint.getX(), bestPoint.getY(), 6, Color.red);
+            List<MapPoint> points = bestPoint.getNeighbors();
+            for (int i = 0; i < points.size(); ++i) {
+                int j = (i + 1) % points.size();
+                debug.drawLine(points.get(i).getX(), points.get(i).getY(), points.get(j).getX(), points.get(j).getY(), Color.red);
+            }
             debug.drawAfterScene();
         }
 
-        if (self.getLife() < self.getMaxLife() * LOW_HP_FACTOR) {
-            goTo(getPreviousWaypoint());
-            return;
-        }
+        goTo(bestPoint);
 
         LivingUnit target = getTarget();
-
         if (target != null) {
             double distance = self.getDistanceTo(target);
 
@@ -111,28 +123,8 @@ public final class MyStrategy implements Strategy {
 
                 int strafeDirection = world.getTickIndex() % STRAFE_PERIOD * 2 < STRAFE_PERIOD ? 1 : -1;
                 move.setStrafeSpeed(strafeDirection * game.getWizardStrafeSpeed());
-
-                return;
             }
         }
-
-        if (self.getLife() > self.getMaxLife() * SAFE_HP_FACTOR) {
-            goTo(bestPoint);
-        }
-    }
-
-    private boolean isPermanentlyUnreacheble(Point2D point) {
-        for (CircularUnit unit : world.getTrees()) {
-            if (point.isCoveredBy(unit)) {
-                return true;
-            }
-        }
-        for (CircularUnit unit : world.getBuildings()) {
-            if (point.isCoveredBy(unit)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private double scorePoint(Point2D point) {
@@ -175,27 +167,6 @@ public final class MyStrategy implements Strategy {
         return score;
     }
 
-    private List<Point2D> getPointsAroundSelf() {
-        int depth = 3;
-        double hexagonSize = self.getRadius();
-        List<Point2D> points = new ArrayList<>();
-        for (int q = -depth; q <= depth; ++q) {
-            for (int r = -depth; r <= depth; ++r) {
-                int s = -q - r;
-                if (-depth <= s && s <= depth) {
-                    double x = hexagonSize * 3 / 2 * q;
-                    double y = hexagonSize * StrictMath.sqrt(3) * (r + (double) q / 2);
-                    Point2D point = new Point2D(self.getX() + x, self.getY() + y);
-                    if (isPermanentlyUnreacheble(point)) {
-                        continue;
-                    }
-                    points.add(point);
-                }
-            }
-        }
-        return points;
-    }
-
     private void initializeStrategy() {
         if (random != null) {
             return;
@@ -214,64 +185,45 @@ public final class MyStrategy implements Strategy {
 
         double mapSize = game.getMapSize();
 
-        waypointsByLine.put(LineType.MIDDLE, new Point2D[]{
-                new Point2D(100.0D, mapSize - 100.0D),
-                random.nextBoolean()
-                        ? new Point2D(600.0D, mapSize - 200.0D)
-                        : new Point2D(200.0D, mapSize - 600.0D),
-                new Point2D(800.0D, mapSize - 800.0D),
-                new Point2D(mapSize - 600.0D, 600.0D)
-        });
-
-        waypointsByLine.put(LineType.TOP, new Point2D[]{
-                new Point2D(100.0D, mapSize - 100.0D),
-                new Point2D(100.0D, mapSize - 400.0D),
-                new Point2D(200.0D, mapSize - 800.0D),
-                new Point2D(200.0D, mapSize * 0.75D),
-                new Point2D(200.0D, mapSize * 0.5D),
-                new Point2D(200.0D, mapSize * 0.25D),
-                new Point2D(200.0D, 200.0D),
-                new Point2D(mapSize * 0.25D, 200.0D),
-                new Point2D(mapSize * 0.5D, 200.0D),
-                new Point2D(mapSize * 0.75D, 200.0D),
-                new Point2D(mapSize - 200.0D, 200.0D)
-        });
-
-        waypointsByLine.put(LineType.BOTTOM, new Point2D[]{
-                new Point2D(100.0D, mapSize - 100.0D),
-                new Point2D(400.0D, mapSize - 100.0D),
-                new Point2D(800.0D, mapSize - 200.0D),
-                new Point2D(mapSize * 0.25D, mapSize - 200.0D),
-                new Point2D(mapSize * 0.5D, mapSize - 200.0D),
-                new Point2D(mapSize * 0.75D, mapSize - 200.0D),
-                new Point2D(mapSize - 200.0D, mapSize - 200.0D),
-                new Point2D(mapSize - 200.0D, mapSize * 0.75D),
-                new Point2D(mapSize - 200.0D, mapSize * 0.5D),
-                new Point2D(mapSize - 200.0D, mapSize * 0.25D),
-                new Point2D(mapSize - 200.0D, 200.0D)
-        });
-
-        line = LineType.MIDDLE;
-        waypoints = waypointsByLine.get(line);
-
         enemyFaction = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
 
-        points = getPoints();
+        map = createMap();
     }
 
-    private List<Point2D> getPoints() {
-        List<Point2D> points = new ArrayList<>();
-        double hexagonSize = game.getWizardRadius();
+    private Point2D hexToPixel(double q, double r) {
+        final double HEXAGON_SIZE = game.getWizardRadius();
+        double x = HEXAGON_SIZE * 3 / 2 * q;
+        double y = HEXAGON_SIZE * StrictMath.sqrt(3) * (r + q / 2);
+        return new Point2D(x, y);
+    }
+
+    private List<MapPoint> createMap() {
+        Map<HexPoint, MapPoint> points = new HashMap<>();
+        double radius = self.getRadius();
         for (int q = 0; q < 100; ++q) {
             for (int r = 0; r < 100; ++r) {
-                double x = hexagonSize * 3 / 2 * q;
-                double y = hexagonSize * StrictMath.sqrt(3) * (r + (double) q / 2);
-                if (0 < x && x < world.getWidth() && 0 < y && y < world.getHeight()) { // TODO: Figure out width and height.
-                    points.add(new Point2D(x, y));
+                Point2D point = hexToPixel(q, r);
+                if (radius < point.getX() && point.getX() < world.getWidth() - radius &&
+                        radius < point.getY() && point.getY() < world.getHeight() - radius) {
+                    points.put(new HexPoint(q, r), new MapPoint(point));
                 }
             }
         }
-        return points;
+        for (Map.Entry<HexPoint, MapPoint> entry : points.entrySet()) {
+            int q = entry.getKey().getQ();
+            int r = entry.getKey().getR();
+            MapPoint point = entry.getValue();
+            List<MapPoint> neighbors = new ArrayList<>();
+            for (HexPoint delta : HEX_DIRECTIONS) {
+                MapPoint neighbor = points.get(new HexPoint(q + delta.q, r + delta.r));
+                if (neighbor == null) {
+                    continue;
+                }
+                neighbors.add(neighbor);
+            }
+            point.setNeighbors(neighbors);
+        }
+        return Collections.unmodifiableList(new ArrayList<>(points.values()));
     }
 
     private void initializeTick(Wizard self, World world, Game game, Move move) {
@@ -279,51 +231,6 @@ public final class MyStrategy implements Strategy {
         this.world = world;
         this.game = game;
         this.move = move;
-    }
-
-    /**
-     * Данный метод предполагает, что все ключевые точки на линии упорядочены по уменьшению дистанции до последней
-     * ключевой точки. Перебирая их по порядку, находим первую попавшуюся точку, которая находится ближе к последней
-     * точке на линии, чем волшебник. Это и будет следующей ключевой точкой.
-     * <p>
-     * Дополнительно проверяем, не находится ли волшебник достаточно близко к какой-либо из ключевых точек. Если это
-     * так, то мы сразу возвращаем следующую ключевую точку.
-     */
-    private Point2D getNextWaypoint() {
-        int lastWaypointIndex = waypoints.length - 1;
-        Point2D lastWaypoint = waypoints[lastWaypointIndex];
-
-        for (int waypointIndex = 0; waypointIndex < lastWaypointIndex; ++waypointIndex) {
-            Point2D waypoint = waypoints[waypointIndex];
-
-            if (waypoint.getDistanceTo(self) <= WAYPOINT_RADIUS) {
-                return waypoints[waypointIndex + 1];
-            }
-
-            if (lastWaypoint.getDistanceTo(waypoint) < lastWaypoint.getDistanceTo(self)) {
-                return waypoint;
-            }
-        }
-
-        return lastWaypoint;
-    }
-
-    private Point2D getPreviousWaypoint() {
-        Point2D firstWaypoint = waypoints[0];
-
-        for (int waypointIndex = waypoints.length - 1; waypointIndex > 0; --waypointIndex) {
-            Point2D waypoint = waypoints[waypointIndex];
-
-            if (waypoint.getDistanceTo(self) <= WAYPOINT_RADIUS) {
-                return waypoints[waypointIndex - 1];
-            }
-
-            if (firstWaypoint.getDistanceTo(waypoint) < firstWaypoint.getDistanceTo(self)) {
-                return waypoint;
-            }
-        }
-
-        return firstWaypoint;
     }
 
     private void goTo(Point2D point) {
@@ -373,7 +280,7 @@ public final class MyStrategy implements Strategy {
         return unit.getFaction() == self.getFaction();
     }
 
-    private static final class Point2D {
+    private static class Point2D {
         private final double x;
         private final double y;
 
@@ -405,9 +312,70 @@ public final class MyStrategy implements Strategy {
         public double getDistanceTo(Unit unit) {
             return getDistanceTo(unit.getX(), unit.getY());
         }
+    }
 
-        public boolean isCoveredBy(CircularUnit unit) {
-            return getDistanceTo(unit) <= unit.getRadius();
+    private static class MapPoint extends Point2D {
+        private boolean isReachable;
+        private List<MapPoint> neighbors;
+
+        public MapPoint(Point2D point) {
+            super(point.getX(), point.getY());
+        }
+
+        public boolean isReachable() {
+            return isReachable;
+        }
+
+        public void setReachable(boolean reachable) {
+            isReachable = reachable;
+        }
+
+        public List<MapPoint> getNeighbors() {
+            return neighbors;
+        }
+
+        public void setNeighbors(List<MapPoint> neighbors) {
+            if (this.neighbors != null) {
+                throw new RuntimeException("Neighbors already set.");
+            }
+            this.neighbors = neighbors;
+        }
+    }
+
+    private static class HexPoint {
+        private final int q;
+        private final int r;
+
+        public HexPoint(int q, int r) {
+            this.q = q;
+            this.r = r;
+        }
+
+        public int getQ() {
+            return q;
+        }
+
+        public int getR() {
+            return r;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            HexPoint hexPoint = (HexPoint) o;
+
+            if (q != hexPoint.q) return false;
+            return r == hexPoint.r;
+
+        }
+
+        @Override
+        public int hashCode() {
+            int result = q;
+            result = 31 * result + r;
+            return result;
         }
     }
 
