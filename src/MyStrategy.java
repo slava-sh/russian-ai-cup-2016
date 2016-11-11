@@ -3,8 +3,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Random;
 
 import model.ActionType;
@@ -34,7 +37,7 @@ public final class MyStrategy implements Strategy {
 
   private double HEXAGON_SIZE;
 
-  private List<MapPoint> map;
+  private Map<HexPoint, MapPoint> map;
   private Faction ENEMY_FRACTION;
 
   private Random random;
@@ -54,7 +57,7 @@ public final class MyStrategy implements Strategy {
     MapPoint bestPoint = null;
     double bestScore = 0;
     double worstScore = 0;
-    for (MapPoint point : map) {
+    for (MapPoint point : map.values()) {
       if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
         continue;
       }
@@ -72,8 +75,16 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    MapPoint currentPoint = map.get(pixelToHex(self.getX(), self.getY()));
+    List<MapPoint> path = findPath(currentPoint, bestPoint);
+    MapPoint nextPoint = path.size() >= 1 ? path.get(1) : currentPoint;
+
     if (debug != null) {
-      for (MapPoint point : map) {
+      drawHexTile(nextPoint, Color.blue);
+      drawPath(path, Color.red);
+      drawHexTile(bestPoint, Color.red);
+
+      for (MapPoint point : map.values()) {
         if (point.getDistanceTo(self) > self.getVisionRange()) {
           continue;
         }
@@ -105,21 +116,7 @@ public final class MyStrategy implements Strategy {
       debug.drawBeforeScene();
     }
 
-    if (debug != null) {
-      List<MapPoint> points = bestPoint.getNeighbors();
-      for (int i = 0; i < points.size(); ++i) {
-        int j = (i + 1) % points.size();
-        debug.drawLine(
-            points.get(i).getX(),
-            points.get(i).getY(),
-            points.get(j).getX(),
-            points.get(j).getY(),
-            Color.red);
-      }
-      debug.drawAfterScene();
-    }
-
-    goTo(bestPoint);
+    goTo(nextPoint);
 
     LivingUnit target = getTarget();
     if (target != null) {
@@ -141,6 +138,61 @@ public final class MyStrategy implements Strategy {
     }
   }
 
+  private void drawPath(List<MapPoint> path, Color color) {
+    for (int i = 1; i < path.size(); ++i) {
+      debug.drawLine(
+          path.get(i - 1).getX(),
+          path.get(i - 1).getY(),
+          path.get(i).getX(),
+          path.get(i).getY(),
+          color);
+    }
+  }
+
+  private void drawHexTile(MapPoint point, Color color) {
+    List<MapPoint> points = point.getNeighbors();
+    for (int i = 0; i < points.size(); ++i) {
+      int j = (i + 1) % points.size();
+      debug.drawLine(
+          points.get(i).getX(),
+          points.get(i).getY(),
+          points.get(j).getX(),
+          points.get(j).getY(),
+          color);
+    }
+  }
+
+  private List<MapPoint> findPath(MapPoint start, MapPoint end) {
+    // Breadth-first search.
+    Map<MapPoint, MapPoint> prev = new IdentityHashMap<>();
+    prev.put(start, null);
+    Queue<MapPoint> queue = new LinkedList<>();
+    queue.add(start);
+    while (!queue.isEmpty()) {
+      MapPoint point = queue.poll();
+      if (point.equals(end)) {
+        break;
+      }
+      for (MapPoint neighbor : point.getNeighbors()) {
+        if (neighbor.isReachable() && !prev.containsKey(neighbor)) {
+          prev.put(neighbor, point);
+          queue.add(neighbor);
+        }
+      }
+    }
+
+    if (!prev.containsKey(end)) {
+      return null;
+    }
+
+    List<MapPoint> path = new ArrayList<>();
+    for (MapPoint point = end; point != null; point = prev.get(point)) {
+      path.add(point);
+    }
+    Collections.reverse(path);
+    return path;
+  }
+
   private void updateMap() {
     if (map == null) {
       map = createMap();
@@ -154,9 +206,9 @@ public final class MyStrategy implements Strategy {
     units.addAll(Arrays.asList(world.getBuildings()));
     //units.addAll(Arrays.asList(world.getWizards()));
     //units.addAll(Arrays.asList(world.getMinions()));
-    for (MapPoint point : map) {
+    for (MapPoint point : map.values()) {
       boolean isReachable = true;
-      for (LivingUnit unit : units) {
+      for (LivingUnit unit : units) { // TODO: Convert Point2D to Hex and find neighbors instead.
         if (point.getDistanceTo(unit) < self.getRadius() + unit.getRadius()) {
           isReachable = false;
           break;
@@ -238,8 +290,26 @@ public final class MyStrategy implements Strategy {
     return new Point2D(x, y);
   }
 
-  private List<MapPoint> createMap() {
-    Map<HexPoint, MapPoint> points = new HashMap<>();
+  private HexPoint pixelToHex(double x, double y) {
+    double q = x * 2 / 3 / HEXAGON_SIZE;
+    double r = (-x / 3 + StrictMath.sqrt(3) / 3 * y) / HEXAGON_SIZE;
+    double s = -q - r;
+    int rx = (int) StrictMath.round(q);
+    int ry = (int) StrictMath.round(r);
+    int rz = (int) StrictMath.round(s);
+    double x_diff = StrictMath.abs(rx - q);
+    double y_diff = StrictMath.abs(ry - r);
+    double z_diff = StrictMath.abs(rz - s);
+    if (x_diff > y_diff && x_diff > z_diff) {
+      rx = -ry - rz;
+    } else if (y_diff > z_diff) {
+      ry = -rx - rz;
+    }
+    return new HexPoint(rx, ry);
+  }
+
+  private Map<HexPoint, MapPoint> createMap() {
+    Map<HexPoint, MapPoint> map = new HashMap<>();
     double radius = self.getRadius();
     for (int q = 0; q < 300; ++q) {
       for (int r = 0; r < 300; ++r) {
@@ -248,19 +318,19 @@ public final class MyStrategy implements Strategy {
             && point.getX() < world.getWidth() - radius
             && radius < point.getY()
             && point.getY() < world.getHeight() - radius) {
-          points.put(new HexPoint(q, r), new MapPoint(point));
+          map.put(new HexPoint(q, r), new MapPoint(point));
         }
       }
     }
 
-    for (Map.Entry<HexPoint, MapPoint> entry : points.entrySet()) {
+    for (Map.Entry<HexPoint, MapPoint> entry : map.entrySet()) {
       int q = entry.getKey().getQ();
       int r = entry.getKey().getR();
       MapPoint point = entry.getValue();
 
       List<MapPoint> neighbors = new ArrayList<>();
       for (HexPoint delta : HEX_DIRECTIONS) {
-        MapPoint neighbor = points.get(new HexPoint(q + delta.q, r + delta.r));
+        MapPoint neighbor = map.get(new HexPoint(q + delta.q, r + delta.r));
         if (neighbor == null) {
           continue;
         }
@@ -269,7 +339,7 @@ public final class MyStrategy implements Strategy {
       point.setNeighbors(neighbors);
     }
 
-    return Collections.unmodifiableList(new ArrayList<>(points.values()));
+    return Collections.unmodifiableMap(map);
   }
 
   private void initializeTick(Wizard self, World world, Game game, Move move) {
