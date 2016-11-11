@@ -82,8 +82,8 @@ public final class MyStrategy implements Strategy {
           continue;
         }
         double score = scorePoint(point);
-        double normedScore = Math.max(0.3, (score - worstScore) / (bestScore - worstScore));
-        double clampedComplement = Math.max(0, Math.min(1, 1 - normedScore));
+        double normedScore = StrictMath.max(0.3, (score - worstScore) / (bestScore - worstScore));
+        double clampedComplement = StrictMath.max(0, StrictMath.min(1, 1 - normedScore));
         Color color = new Color((float) clampedComplement, 1f, (float) clampedComplement);
         debug.fillCircle(point.getX(), point.getY(), 3, color);
       }
