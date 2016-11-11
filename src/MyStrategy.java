@@ -11,19 +11,21 @@ import java.util.Queue;
 import java.util.Random;
 
 import model.ActionType;
+import model.Building;
 import model.Faction;
 import model.Game;
 import model.LivingUnit;
 import model.Minion;
 import model.MinionType;
 import model.Move;
+import model.Tree;
 import model.Unit;
 import model.Wizard;
 import model.World;
 
 public final class MyStrategy implements Strategy {
 
-  private static final int STRAFE_PERIOD = 80;
+  private static final double REACHABILITY_EPS = 3;
 
   private static final List<HexPoint> HEX_DIRECTIONS =
       Collections.unmodifiableList(
@@ -36,13 +38,11 @@ public final class MyStrategy implements Strategy {
               new HexPoint(0, 1)));
 
   private double HEXAGON_SIZE;
-
-  private Map<HexPoint, MapPoint> map;
   private Faction ENEMY_FRACTION;
 
+  private Map<HexPoint, MapPoint> map;
   private Random random;
   private Visualizer debug;
-
   private Wizard self;
   private World world;
   private Game game;
@@ -52,24 +52,23 @@ public final class MyStrategy implements Strategy {
   public void move(Wizard self, World world, Game game, Move move) {
     initializeTick(self, world, game, move);
     initializeStrategy();
+    updateMap();
 
     MapPoint bestPoint = null;
-    double bestScore = 0;
-    double worstScore = 0;
+    MapPoint worstPoint = null;
     for (MapPoint point : map.values()) {
-      if (point.getDistanceTo(self) > self.getVisionRange()) {
+      if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
         continue;
       }
-      double score = scorePoint(point);
       if (bestPoint == null) {
         bestPoint = point;
-        bestScore = score;
-        worstScore = score;
+        worstPoint = point;
       } else {
-        worstScore = StrictMath.min(worstScore, score);
-        if (score > bestScore) {
+        if (point.getScore() > bestPoint.getScore()) {
           bestPoint = point;
-          bestScore = score;
+        }
+        if (point.getScore() < worstPoint.getScore()) {
+          worstPoint = point;
         }
       }
     }
@@ -83,14 +82,14 @@ public final class MyStrategy implements Strategy {
       drawPath(path, Color.red);
       drawHexTile(bestPoint, Color.red);
 
+      double scoreSpread = bestPoint.getScore() - worstPoint.getScore();
       for (MapPoint point : map.values()) {
-        if (point.getDistanceTo(self) > self.getVisionRange()) {
+        if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
           continue;
         }
-        double score = scorePoint(point);
-        double normedScore = StrictMath.max(0.3, (score - worstScore) / (bestScore - worstScore));
-        double clampedComplement = StrictMath.max(0, StrictMath.min(1, 1 - normedScore));
-        Color color = new Color((float) clampedComplement, 1f, (float) clampedComplement);
+        double normedScore = (point.getScore() - worstPoint.getScore()) / scoreSpread;
+        double k = StrictMath.max(0, StrictMath.min(1, 1 - StrictMath.max(0.3, normedScore)));
+        Color color = new Color((float) k, 1f, (float) k);
         debug.fillCircle(point.getX(), point.getY(), 3, color);
       }
 
@@ -111,6 +110,18 @@ public final class MyStrategy implements Strategy {
       debug.drawBeforeScene();
     }
 
+    {
+      List<LivingUnit> units = new ArrayList<>();
+      units.addAll(Arrays.asList(world.getTrees()));
+      units.addAll(Arrays.asList(world.getBuildings()));
+      units.addAll(Arrays.asList(world.getWizards()));
+      units.addAll(Arrays.asList(world.getMinions()));
+      for (LivingUnit unit : units) {
+        debug.drawCircle(unit.getX(), unit.getY(), 10, Color.black);
+      }
+      debug.drawAfterScene();
+    }
+
     goTo(nextPoint);
 
     LivingUnit target = getTarget();
@@ -125,6 +136,20 @@ public final class MyStrategy implements Strategy {
         }
       }
     }
+  }
+
+  private void updateMap() {
+    if (map == null) {
+      map = createMap();
+    }
+
+    map.values()
+        .forEach(
+            point -> {
+              if (point.getDistanceTo(self) < self.getVisionRange()) {
+                updatePoint(point);
+              }
+            });
   }
 
   private void drawPath(List<MapPoint> path, Color color) {
@@ -163,15 +188,20 @@ public final class MyStrategy implements Strategy {
         break;
       }
       for (MapPoint neighbor : point.getNeighbors()) {
-        if (!prev.containsKey(neighbor)) {
+        if (neighbor.isReachable() && !prev.containsKey(neighbor)) {
           prev.put(neighbor, point);
           queue.add(neighbor);
+
+          if (debug != null) {
+            debug.drawLine(
+                neighbor.getX(),
+                neighbor.getY(),
+                point.getX(),
+                point.getY(),
+                Color.lightGray);
+          }
         }
       }
-    }
-
-    if (!prev.containsKey(end)) {
-      return null;
     }
 
     List<MapPoint> path = new ArrayList<>();
@@ -182,49 +212,89 @@ public final class MyStrategy implements Strategy {
     return path;
   }
 
-  private double scorePoint(Point2D point) {
+  private void updatePoint(MapPoint point) {
     double score = 0;
+    boolean isReachable = true;
+
+    double max_sum = world.getHeight() + world.getWidth();
+    score += ((world.getHeight() - point.getY()) + point.getX()) / max_sum * 10000;
+
     for (Wizard wizard : world.getWizards()) {
       double distance = point.getDistanceTo(wizard);
 
-      if (wizard.isMaster() && distance < wizard.getVisionRange() / 3) {
-        double MASTER_VISION_RANGE_FACTOR = 50;
-        score += MASTER_VISION_RANGE_FACTOR;
+      if (!wizard.isMe() && distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
+        isReachable = false;
       }
 
-      if (isAlly(wizard) && !wizard.isMe()) {
-        if (distance < wizard.getCastRange()) {
-          if (StrictMath.abs(wizard.getAngleTo(point.getX(), point.getY()))
-              < StrictMath.PI / 4) { // TODO: Discount for rotation time.
-            double ALLY_WIZARD_CAST_RANGE_FACTOR = 10;
-            score += ALLY_WIZARD_CAST_RANGE_FACTOR;
+      if (isAlly(wizard)) {
+        if (wizard.isMaster() && distance < wizard.getVisionRange() / 3) {
+          double MASTER_VISION_RANGE_FACTOR = 20;
+          score += MASTER_VISION_RANGE_FACTOR;
+        }
+
+        if (!wizard.isMe()) {
+          if (distance < wizard.getCastRange()) {
+            if (StrictMath.abs(wizard.getAngleTo(point.getX(), point.getY())) < StrictMath.PI / 4) {
+              // TODO: Discount for rotation time.
+              double ALLY_WIZARD_CAST_RANGE_FACTOR = 15;
+              score += ALLY_WIZARD_CAST_RANGE_FACTOR;
+            }
+          }
+
+          if (distance < wizard.getRadius() + 1.5 * self.getRadius()) {
+            double TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR = -10;
+            score += TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR;
           }
         }
       }
     }
+
     for (Minion minion : world.getMinions()) {
       double distance = point.getDistanceTo(minion);
+
+      if (distance < self.getRadius() + minion.getRadius() + REACHABILITY_EPS) {
+        isReachable = false;
+      }
+
       if (isAlly(minion)) {
         double angle = minion.getAngleTo(point.getX(), point.getY());
-        if (minion.getType() == MinionType.ORC_WOODCUTTER
-            && distance < game.getOrcWoodcutterAttackRange()) {
-          if (StrictMath.abs(angle)
-              < game.getOrcWoodcutterAttackSector() / 2 * 2) { // TODO: Discount for rotation time.
-            double ALLY_WOODCUTTER_ATTACK_RANGE_FACTOR = 5;
-            score += ALLY_WOODCUTTER_ATTACK_RANGE_FACTOR;
-          }
+
+        if (minion.getType() == MinionType.ORC_WOODCUTTER && distance < minion.getVisionRange()) {
+          // TODO: Discount for rotation time.
+          double ALLY_WOODCUTTER_VISION_RANGE_FACTOR = 3;
+          score += ALLY_WOODCUTTER_VISION_RANGE_FACTOR;
         }
-        if (minion.getType() == MinionType.FETISH_BLOWDART
-            && distance < game.getFetishBlowdartAttackRange()) {
-          if (StrictMath.abs(angle)
-              < game.getFetishBlowdartAttackSector() / 2 * 2) { // TODO: Discount for rotation time.
-            double ALLY_FETISH_ATTACK_RANGE_FACTOR = 5;
-            score += ALLY_FETISH_ATTACK_RANGE_FACTOR;
-          }
+
+        if (minion.getType() == MinionType.FETISH_BLOWDART && distance < minion.getVisionRange()) {
+          //if (StrictMath.abs(angle) < game.getFetishBlowdartAttackSector() / 2 * 2) {
+          // TODO: Discount for rotation time.
+          double ALLY_FETISH_VISION_RANGE_FACTOR = 5;
+          score += ALLY_FETISH_VISION_RANGE_FACTOR;
         }
       }
     }
-    return score;
+
+    for (Building building : world.getBuildings()) {
+      double distance = point.getDistanceTo(building);
+      if (distance < self.getRadius() + building.getRadius() + REACHABILITY_EPS) {
+        isReachable = false;
+      }
+      if (isAlly(building)) {
+        if (distance < building.getVisionRange()) {
+          double ALLY_BUILDING_VISION_RANGE_FACTOR = 3;
+          score += ALLY_BUILDING_VISION_RANGE_FACTOR;
+        }
+      }
+    }
+
+    for (Tree tree : world.getTrees()) {
+      if (point.getDistanceTo(tree) < self.getRadius() + tree.getRadius() + REACHABILITY_EPS) {
+        isReachable = false;
+      }
+    }
+
+    point.setScore(score);
+    point.setReachable(isReachable);
   }
 
   private void initializeStrategy() {
@@ -246,8 +316,6 @@ public final class MyStrategy implements Strategy {
     ENEMY_FRACTION = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
 
     HEXAGON_SIZE = self.getRadius();
-
-    map = createMap();
   }
 
   private Point2D hexToPixel(double q, double r) {
@@ -276,9 +344,6 @@ public final class MyStrategy implements Strategy {
 
   private Map<HexPoint, MapPoint> createMap() {
     Map<HexPoint, MapPoint> map = new HashMap<>();
-    List<LivingUnit> obstacles = new ArrayList<>();
-    obstacles.addAll(Arrays.asList(world.getTrees()));
-    obstacles.addAll(Arrays.asList(world.getBuildings()));
     double radius = self.getRadius();
     for (int q = -100; q <= 100; ++q) {
       for (int r = -100; r <= 100; ++r) {
@@ -287,16 +352,7 @@ public final class MyStrategy implements Strategy {
             && point.getX() < world.getWidth() - radius
             && radius < point.getY()
             && point.getY() < world.getHeight() - radius) {
-          boolean isReachable = true;
-          for (LivingUnit obstacle : obstacles) {
-            if (point.getDistanceTo(obstacle) < radius + obstacle.getRadius()) {
-              isReachable = false;
-              break;
-            }
-          }
-          if (isReachable) {
-            map.put(pixelToHex(point.getX(), point.getY()), new MapPoint(point));
-          }
+          map.put(pixelToHex(point.getX(), point.getY()), new MapPoint(point));
         }
       }
     }
@@ -428,6 +484,8 @@ public final class MyStrategy implements Strategy {
 
   private static class MapPoint extends Point2D {
     private List<MapPoint> neighbors;
+    private boolean isReachable;
+    private double score;
 
     public MapPoint(Point2D point) {
       super(point.getX(), point.getY());
@@ -442,6 +500,22 @@ public final class MyStrategy implements Strategy {
         throw new RuntimeException("Neighbors already set.");
       }
       this.neighbors = Collections.unmodifiableList(neighbors);
+    }
+
+    public boolean isReachable() {
+      return isReachable;
+    }
+
+    public void setReachable(boolean reachable) {
+      isReachable = reachable;
+    }
+
+    public double getScore() {
+      return score;
+    }
+
+    public void setScore(double score) {
+      this.score = score;
     }
   }
 
