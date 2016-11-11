@@ -39,6 +39,7 @@ public final class MyStrategy implements Strategy {
 
   private double HEXAGON_SIZE;
   private Faction ENEMY_FRACTION;
+  private double WALKING_RETARGET_THRESHOLD = 10;
 
   private Map<HexPoint, MapPoint> map;
   private Random random;
@@ -47,6 +48,7 @@ public final class MyStrategy implements Strategy {
   private World world;
   private Game game;
   private Move move;
+  private MapPoint walkingTarget;
 
   @Override
   public void move(Wizard self, World world, Game game, Move move) {
@@ -60,6 +62,7 @@ public final class MyStrategy implements Strategy {
       if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
         continue;
       }
+
       if (bestPoint == null) {
         bestPoint = point;
         worstPoint = point;
@@ -71,16 +74,36 @@ public final class MyStrategy implements Strategy {
           worstPoint = point;
         }
       }
+
+      if (debug != null) {
+        debug.showText(
+            point.getX(), point.getY(), ((Number) (int) point.getScore()).toString(), Color.black);
+      }
     }
 
     MapPoint currentPoint = map.get(pixelToHex(self.getX(), self.getY()));
-    List<MapPoint> path = findPath(currentPoint, bestPoint);
+    List<MapPoint> path = null;
+    if (walkingTarget == null
+        || !walkingTarget.isReachable()
+        || walkingTarget.getDistanceTo(self) > self.getVisionRange()
+        || bestPoint.getScore() - walkingTarget.getScore() > WALKING_RETARGET_THRESHOLD) {
+      path = findPath(currentPoint, bestPoint);
+      if (path.size() > 1) {
+        walkingTarget = bestPoint;
+      } else {
+        path = null;
+      }
+    }
+    if (path == null) {
+      path = findPath(currentPoint, walkingTarget);
+    }
     MapPoint nextPoint = path.size() > 1 ? path.get(1) : currentPoint;
 
     if (debug != null) {
       drawHexTile(nextPoint, Color.blue);
       drawPath(path, Color.red);
-      drawHexTile(bestPoint, Color.red);
+      drawHexTile(walkingTarget, Color.red);
+      debug.drawCircle(bestPoint.getX(), bestPoint.getY(), self.getRadius() / 2, Color.green);
 
       double scoreSpread = bestPoint.getScore() - worstPoint.getScore();
       for (MapPoint point : map.values()) {
@@ -194,11 +217,7 @@ public final class MyStrategy implements Strategy {
 
           if (debug != null) {
             debug.drawLine(
-                neighbor.getX(),
-                neighbor.getY(),
-                point.getX(),
-                point.getY(),
-                Color.lightGray);
+                neighbor.getX(), neighbor.getY(), point.getX(), point.getY(), Color.lightGray);
           }
         }
       }
@@ -217,7 +236,7 @@ public final class MyStrategy implements Strategy {
     boolean isReachable = true;
 
     double max_sum = world.getHeight() + world.getWidth();
-    score += ((world.getHeight() - point.getY()) + point.getX()) / max_sum * 10000;
+    score += ((world.getHeight() - point.getY()) + point.getX()) / max_sum * 100;
 
     for (Wizard wizard : world.getWizards()) {
       double distance = point.getDistanceTo(wizard);
@@ -281,7 +300,7 @@ public final class MyStrategy implements Strategy {
       }
       if (isAlly(building)) {
         if (distance < building.getVisionRange()) {
-          double ALLY_BUILDING_VISION_RANGE_FACTOR = 3;
+          double ALLY_BUILDING_VISION_RANGE_FACTOR = 0;
           score += ALLY_BUILDING_VISION_RANGE_FACTOR;
         }
       }
