@@ -133,22 +133,13 @@ public final class MyStrategy implements Strategy {
       debug.drawBeforeScene();
     }
 
-    {
-      List<LivingUnit> units = new ArrayList<>();
-      units.addAll(Arrays.asList(world.getTrees()));
-      units.addAll(Arrays.asList(world.getBuildings()));
-      units.addAll(Arrays.asList(world.getWizards()));
-      units.addAll(Arrays.asList(world.getMinions()));
-      for (LivingUnit unit : units) {
-        debug.drawCircle(unit.getX(), unit.getY(), 10, Color.black);
-      }
-      debug.drawAfterScene();
-    }
+    LivingUnit target = getTarget();
 
     goTo(nextPoint);
-
-    LivingUnit target = getTarget();
-    if (target != null) {
+    if (target == null) {
+      turnTo(nextPoint);
+    } else {
+      turnTo(new Point2D(target));
       double distance = self.getDistanceTo(target);
       if (distance <= self.getCastRange()) {
         double angle = self.getAngleTo(target);
@@ -236,7 +227,7 @@ public final class MyStrategy implements Strategy {
     boolean isReachable = true;
 
     double max_sum = world.getHeight() + world.getWidth();
-    score += ((world.getHeight() - point.getY()) + point.getX()) / max_sum * 100;
+    score += (StrictMath.round(world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
 
     for (Wizard wizard : world.getWizards()) {
       double distance = point.getDistanceTo(wizard);
@@ -403,10 +394,11 @@ public final class MyStrategy implements Strategy {
   }
 
   private void goTo(Point2D point) {
-    double angle = turnTo(point);
-    if (StrictMath.abs(angle) < game.getStaffSector() / 4.0D) {
-      move.setSpeed(game.getWizardForwardSpeed());
-    }
+    double speed = self.getDistanceTo(point.getX(), point.getY());
+    double angle = self.getAngleTo(point.getX(), point.getY());
+    // TODO: Account for the wizard having different speeds in different directions.
+    move.setSpeed(speed * StrictMath.cos(angle));
+    move.setStrafeSpeed(speed * StrictMath.sin(angle));
   }
 
   private double turnTo(Point2D point) {
