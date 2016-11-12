@@ -166,6 +166,7 @@ public final class MyStrategy implements Strategy {
 
   private static class Brain {
 
+    private final Faction ALLY_FRACTION;
     private final Faction ENEMY_FRACTION;
 
     private final Visualizer debug;
@@ -174,16 +175,9 @@ public final class MyStrategy implements Strategy {
     private final Walker walker;
     private final Shooter shooter;
 
-    private Wizard self;
-    private World world;
-    private Game game;
-
     public Brain(Wizard self, World world, Game game) {
-      this.self = self;
-      this.world = world;
-      this.game = game;
-
-      ENEMY_FRACTION = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
+      ALLY_FRACTION = self.getFaction();
+      ENEMY_FRACTION = ALLY_FRACTION == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
 
       Visualizer debugVisualizer = null;
       try {
@@ -198,21 +192,15 @@ public final class MyStrategy implements Strategy {
       debug = debugVisualizer;
 
       random = new Random(game.getRandomSeed());
-
-      field = new Field(this);
-
-      walker = new Walker(this);
-
-      shooter = new Shooter(this);
+      field = new Field(this, debug, self);
+      walker = new Walker(this, debug);
+      shooter = new Shooter(this, debug);
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
-      this.self = self;
-      this.world = world;
-      this.game = game;
-
-      //if (debug == null || world.getTickIndex() % 10 == 0) {
-      field.update();
+      field.update(self, world, game);
+      walker.update(self, world, game);
+      shooter.update(self, world, game);
 
       FieldPoint bestPoint = null;
       FieldPoint worstPoint = null;
@@ -318,7 +306,7 @@ public final class MyStrategy implements Strategy {
     }
 
     public boolean isAlly(LivingUnit unit) {
-      return unit.getFaction() == self.getFaction();
+      return unit.getFaction() == ALLY_FRACTION;
     }
 
     private void drawPath(List<FieldPoint> path, Color color) {
@@ -346,7 +334,7 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private static class Field {
+  private static class Field extends BrainPart {
 
     private static final double REACHABILITY_EPS = 3;
     private static final List<HexPoint> HEX_DIRECTIONS =
@@ -361,15 +349,14 @@ public final class MyStrategy implements Strategy {
 
     private final double HEXAGON_SIZE;
 
-    private final Brain brain;
     private Map<HexPoint, FieldPoint> hexToPoint;
 
-    public Field(Brain brain) {
-      this.brain = brain;
-
-      HEXAGON_SIZE = brain.self.getRadius();
+    public Field(Brain brain, Visualizer debug, Wizard self) {
+      super(brain, debug);
+      HEXAGON_SIZE = self.getRadius();
     }
 
+    @Override
     public void update() {
       if (hexToPoint == null) {
         hexToPoint = createHexToPoint();
@@ -378,7 +365,7 @@ public final class MyStrategy implements Strategy {
           .values()
           .forEach(
               point -> {
-                if (point.getDistanceTo(brain.self) < brain.self.getVisionRange()) {
+                if (point.getDistanceTo(self) < self.getVisionRange()) {
                   updatePoint(point);
                 }
               });
@@ -409,8 +396,8 @@ public final class MyStrategy implements Strategy {
             prev.put(neighbor, point);
             queue.add(neighbor);
 
-            if (brain.debug != null) {
-              brain.debug.drawLine(
+            if (debug != null) {
+              debug.drawLine(
                   neighbor.getX(), neighbor.getY(), point.getX(), point.getY(), Color.lightGray);
             }
           }
@@ -429,15 +416,15 @@ public final class MyStrategy implements Strategy {
       double score = 0;
       boolean isReachable = true;
 
-      double max_sum = brain.world.getHeight() + brain.world.getWidth();
+      double max_sum = world.getHeight() + world.getWidth();
       score +=
-          (StrictMath.round(brain.world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
+          (StrictMath.round(world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
 
-      for (Wizard wizard : brain.world.getWizards()) {
+      for (Wizard wizard : world.getWizards()) {
         double distance = point.getDistanceTo(wizard);
 
         if (!wizard.isMe()
-            && distance < brain.self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
+            && distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
 
@@ -455,17 +442,17 @@ public final class MyStrategy implements Strategy {
             }
           }
 
-          if (distance < wizard.getRadius() + 1.5 * brain.self.getRadius()) {
+          if (distance < wizard.getRadius() + 1.5 * self.getRadius()) {
             double TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR = -10;
             score += TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR;
           }
         }
       }
 
-      for (Minion minion : brain.world.getMinions()) {
+      for (Minion minion : world.getMinions()) {
         double distance = point.getDistanceTo(minion);
 
-        if (distance < brain.self.getRadius() + minion.getRadius() + REACHABILITY_EPS) {
+        if (distance < self.getRadius() + minion.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
 
@@ -480,7 +467,7 @@ public final class MyStrategy implements Strategy {
 
           if (minion.getType() == MinionType.FETISH_BLOWDART
               && distance < minion.getVisionRange()) {
-            //if (StrictMath.abs(angle) < brain.game.getFetishBlowdartAttackSector() / 2 * 2) {
+            //if (StrictMath.abs(angle) < game.getFetishBlowdartAttackSector() / 2 * 2) {
             // TODO: Discount for rotation time.
             double ALLY_FETISH_VISION_RANGE_FACTOR = 5;
             score += ALLY_FETISH_VISION_RANGE_FACTOR;
@@ -488,9 +475,9 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      for (Building building : brain.world.getBuildings()) {
+      for (Building building : world.getBuildings()) {
         double distance = point.getDistanceTo(building);
-        if (distance < brain.self.getRadius() + building.getRadius() + REACHABILITY_EPS) {
+        if (distance < self.getRadius() + building.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
         if (brain.isAlly(building)) {
@@ -501,9 +488,9 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      for (Tree tree : brain.world.getTrees()) {
+      for (Tree tree : world.getTrees()) {
         if (point.getDistanceTo(tree)
-            < brain.self.getRadius() + tree.getRadius() + REACHABILITY_EPS) {
+            < self.getRadius() + tree.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
       }
@@ -538,14 +525,14 @@ public final class MyStrategy implements Strategy {
 
     private Map<HexPoint, FieldPoint> createHexToPoint() {
       Map<HexPoint, FieldPoint> map = new HashMap<>();
-      double radius = brain.self.getRadius();
+      double radius = self.getRadius();
       for (int q = -100; q <= 100; ++q) {
         for (int r = -100; r <= 100; ++r) {
           Point2D point = hexToPixel(q, r);
           if (radius < point.getX()
-              && point.getX() < brain.world.getWidth() - radius
+              && point.getX() < world.getWidth() - radius
               && radius < point.getY()
-              && point.getY() < brain.world.getHeight() - radius) {
+              && point.getY() < world.getHeight() - radius) {
             map.put(pixelToHex(point.getX(), point.getY()), new FieldPoint(point));
           }
         }
@@ -571,46 +558,42 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private static class Walker {
+  private static class Walker extends BrainPart {
 
     private static final double RETARGET_THRESHOLD = 10;
 
-    private final Brain brain;
-
     private FieldPoint target;
 
-    private Walker(Brain brain) {
-      this.brain = brain;
+    public Walker(Brain brain, Visualizer debug) {
+      super(brain, debug);
     }
 
-    private void goTo(Point2D point, Move move) {
-      double speed = brain.self.getDistanceTo(point.getX(), point.getY());
-      double angle = brain.self.getAngleTo(point.getX(), point.getY());
+    public void goTo(Point2D point, Move move) {
+      double speed = self.getDistanceTo(point.getX(), point.getY());
+      double angle = self.getAngleTo(point.getX(), point.getY());
       // TODO: Account for the wizard having different speeds in different directions.
       move.setSpeed(speed * StrictMath.cos(angle));
       move.setStrafeSpeed(speed * StrictMath.sin(angle));
     }
 
-    private double turnTo(Point2D point, Move move) {
-      double angle = brain.self.getAngleTo(point.getX(), point.getY());
+    public double turnTo(Point2D point, Move move) {
+      double angle = self.getAngleTo(point.getX(), point.getY());
       move.setTurn(angle);
       return angle;
     }
   }
 
-  private static class Shooter {
+  private static class Shooter extends BrainPart {
 
-    private final Brain brain;
-
-    public Shooter(Brain brain) {
-      this.brain = brain;
+    public Shooter(Brain brain, Visualizer debug) {
+      super(brain, debug);
     }
 
-    private LivingUnit getTarget() {
+    public LivingUnit getTarget() {
       List<LivingUnit> targets = new ArrayList<>();
-      targets.addAll(Arrays.asList(brain.world.getBuildings()));
-      targets.addAll(Arrays.asList(brain.world.getWizards()));
-      targets.addAll(Arrays.asList(brain.world.getMinions()));
+      targets.addAll(Arrays.asList(world.getBuildings()));
+      targets.addAll(Arrays.asList(world.getWizards()));
+      targets.addAll(Arrays.asList(world.getMinions()));
 
       LivingUnit bestTarget = null;
 
@@ -619,8 +602,8 @@ public final class MyStrategy implements Strategy {
           continue;
         }
 
-        double distance = brain.self.getDistanceTo(target);
-        if (distance > brain.self.getCastRange()) {
+        double distance = self.getDistanceTo(target);
+        if (distance > self.getCastRange()) {
           continue;
         }
 
@@ -630,6 +613,31 @@ public final class MyStrategy implements Strategy {
       }
 
       return bestTarget;
+    }
+  }
+
+  private static class BrainPart {
+
+    protected final Brain brain;
+
+    protected Visualizer debug;
+    protected Wizard self;
+    protected World world;
+    protected Game game;
+
+    public BrainPart(Brain brain, Visualizer debug) {
+      this.brain = brain;
+      this.debug = debug;
+    }
+
+    public void update(Wizard self, World world, Game game) {
+      this.self = self;
+      this.world = world;
+      this.game = game;
+      update();
+    }
+
+    protected void update() {
     }
   }
 }
