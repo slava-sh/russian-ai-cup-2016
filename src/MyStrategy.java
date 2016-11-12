@@ -172,6 +172,7 @@ public final class MyStrategy implements Strategy {
     private final Random random;
     private final Field field;
     private final Walker walker;
+    private final Shooter shooter;
 
     private Wizard self;
     private World world;
@@ -201,6 +202,8 @@ public final class MyStrategy implements Strategy {
       field = new Field(this);
 
       walker = new Walker(this);
+
+      shooter = new Shooter(this);
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
@@ -208,6 +211,7 @@ public final class MyStrategy implements Strategy {
       this.world = world;
       this.game = game;
 
+      //if (debug == null || world.getTickIndex() % 10 == 0) {
       field.update();
 
       FieldPoint bestPoint = null;
@@ -290,7 +294,7 @@ public final class MyStrategy implements Strategy {
         debug.drawBeforeScene();
       }
 
-      LivingUnit target = getTarget();
+      LivingUnit target = shooter.getTarget();
 
       walker.goTo(nextPoint, move);
       if (target == null) {
@@ -307,6 +311,14 @@ public final class MyStrategy implements Strategy {
           }
         }
       }
+    }
+
+    public boolean isEnemy(LivingUnit unit) {
+      return unit.getFaction() == ENEMY_FRACTION;
+    }
+
+    public boolean isAlly(LivingUnit unit) {
+      return unit.getFaction() == self.getFaction();
     }
 
     private void drawPath(List<FieldPoint> path, Color color) {
@@ -331,40 +343,6 @@ public final class MyStrategy implements Strategy {
             points.get(j).getY(),
             color);
       }
-    }
-
-    private LivingUnit getTarget() {
-      List<LivingUnit> targets = new ArrayList<>();
-      targets.addAll(Arrays.asList(world.getBuildings()));
-      targets.addAll(Arrays.asList(world.getWizards()));
-      targets.addAll(Arrays.asList(world.getMinions()));
-
-      LivingUnit bestTarget = null;
-
-      for (LivingUnit target : targets) {
-        if (!isEnemy(target)) {
-          continue;
-        }
-
-        double distance = self.getDistanceTo(target);
-        if (distance > self.getCastRange()) {
-          continue;
-        }
-
-        if (bestTarget == null || target.getLife() < bestTarget.getLife()) {
-          bestTarget = target;
-        }
-      }
-
-      return bestTarget;
-    }
-
-    public boolean isEnemy(LivingUnit unit) {
-      return unit.getFaction() == ENEMY_FRACTION;
-    }
-
-    public boolean isAlly(LivingUnit unit) {
-      return unit.getFaction() == self.getFaction();
     }
   }
 
@@ -463,26 +441,23 @@ public final class MyStrategy implements Strategy {
           isReachable = false;
         }
 
-        if (brain.isAlly(wizard)) {
+        if (brain.isAlly(wizard) && !wizard.isMe()) {
           if (wizard.isMaster() && distance < wizard.getVisionRange() / 3) {
             double MASTER_VISION_RANGE_FACTOR = 20;
             score += MASTER_VISION_RANGE_FACTOR;
           }
 
-          if (!wizard.isMe()) {
-            if (distance < wizard.getCastRange()) {
-              if (StrictMath.abs(wizard.getAngleTo(point.getX(), point.getY()))
-                  < StrictMath.PI / 4) {
-                // TODO: Discount for rotation time.
-                double ALLY_WIZARD_CAST_RANGE_FACTOR = 15;
-                score += ALLY_WIZARD_CAST_RANGE_FACTOR;
-              }
+          if (distance < wizard.getCastRange()) {
+            if (StrictMath.abs(wizard.getAngleTo(point.getX(), point.getY())) < StrictMath.PI / 4) {
+              // TODO: Discount for rotation time.
+              double ALLY_WIZARD_CAST_RANGE_FACTOR = 15;
+              score += ALLY_WIZARD_CAST_RANGE_FACTOR;
             }
+          }
 
-            if (distance < wizard.getRadius() + 1.5 * brain.self.getRadius()) {
-              double TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR = -10;
-              score += TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR;
-            }
+          if (distance < wizard.getRadius() + 1.5 * brain.self.getRadius()) {
+            double TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR = -10;
+            score += TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR;
           }
         }
       }
@@ -620,6 +595,41 @@ public final class MyStrategy implements Strategy {
       double angle = brain.self.getAngleTo(point.getX(), point.getY());
       move.setTurn(angle);
       return angle;
+    }
+  }
+
+  private static class Shooter {
+
+    private final Brain brain;
+
+    public Shooter(Brain brain) {
+      this.brain = brain;
+    }
+
+    private LivingUnit getTarget() {
+      List<LivingUnit> targets = new ArrayList<>();
+      targets.addAll(Arrays.asList(brain.world.getBuildings()));
+      targets.addAll(Arrays.asList(brain.world.getWizards()));
+      targets.addAll(Arrays.asList(brain.world.getMinions()));
+
+      LivingUnit bestTarget = null;
+
+      for (LivingUnit target : targets) {
+        if (!brain.isEnemy(target)) {
+          continue;
+        }
+
+        double distance = brain.self.getDistanceTo(target);
+        if (distance > brain.self.getCastRange()) {
+          continue;
+        }
+
+        if (bestTarget == null || target.getLife() < bestTarget.getLife()) {
+          bestTarget = target;
+        }
+      }
+
+      return bestTarget;
     }
   }
 }
