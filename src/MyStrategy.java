@@ -105,7 +105,7 @@ public final class MyStrategy implements Strategy {
 
     public void setNeighbors(List<FieldPoint> neighbors) {
       if (this.neighbors != null) {
-        throw new RuntimeException("Neighbors already set.");
+        throw new AssertionError("neighbors are already set.");
       }
       this.neighbors = Collections.unmodifiableList(neighbors);
     }
@@ -152,8 +152,7 @@ public final class MyStrategy implements Strategy {
 
       HexPoint hexPoint = (HexPoint) o;
 
-      if (q != hexPoint.q) return false;
-      return r == hexPoint.r;
+      return q == hexPoint.q && r == hexPoint.r;
     }
 
     @Override
@@ -181,8 +180,8 @@ public final class MyStrategy implements Strategy {
 
       Visualizer debugVisualizer = null;
       try {
-        Class<?> klass = Class.forName("DebugVisualizer");
-        Object instance = klass.getConstructor().newInstance();
+        Class<?> clazz = Class.forName("DebugVisualizer");
+        Object instance = clazz.getConstructor().newInstance();
         debugVisualizer = (Visualizer) instance;
       } catch (ClassNotFoundException e) {
         // Visualizer is not available.
@@ -230,12 +229,16 @@ public final class MyStrategy implements Strategy {
         }
       }
 
+      if (bestPoint == null) {
+        throw new AssertionError("bestPoint is null.");
+      }
+
       FieldPoint currentPoint = field.getClosestPoint(self.getX(), self.getY());
       List<FieldPoint> path = null;
       if (walker.target == null
           || !walker.target.isReachable()
           || walker.target.getDistanceTo(self) > self.getVisionRange()
-          || bestPoint.getScore() - walker.target.getScore() > walker.RETARGET_THRESHOLD) {
+          || bestPoint.getScore() - walker.target.getScore() > Walker.RETARGET_THRESHOLD) {
         path = field.findPath(currentPoint, bestPoint);
         if (path.size() > 1) {
           walker.target = bestPoint;
@@ -619,8 +622,7 @@ public final class MyStrategy implements Strategy {
   private static class BrainPart {
 
     protected final Brain brain;
-
-    protected Visualizer debug;
+    protected final Visualizer debug;
     protected Wizard self;
     protected World world;
     protected Game game;
