@@ -17,7 +17,7 @@ public final class Runner {
 
   public static void main(String[] args) throws IOException {
     Runner runner = null;
-    for (int i = 0; i < 50; ++i) {
+    for (int i = 0; i < 100; ++i) {
       try {
         runner =
             new Runner(
