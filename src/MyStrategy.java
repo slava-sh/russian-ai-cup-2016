@@ -163,7 +163,7 @@ public final class MyStrategy implements Strategy {
   private static class Brain {
 
     private static final double REACHABILITY_EPS = 3;
-
+    private static final double WALKING_RETARGET_THRESHOLD = 10;
     private static final List<HexPoint> HEX_DIRECTIONS =
         Collections.unmodifiableList(
             Arrays.asList(
@@ -173,25 +173,47 @@ public final class MyStrategy implements Strategy {
                 new HexPoint(-1, 0),
                 new HexPoint(-1, 1),
                 new HexPoint(0, 1)));
+    private final double HEXAGON_SIZE;
+    private final Faction ENEMY_FRACTION;
 
-    private double HEXAGON_SIZE;
-    private Faction ENEMY_FRACTION;
-    private double WALKING_RETARGET_THRESHOLD = 10;
+    private final Visualizer debug;
+    private final Random random;
+    private final Map<HexPoint, MapPoint> map;
 
-    private Map<HexPoint, MapPoint> map;
-    private Random random;
     private Wizard self;
     private World world;
     private Game game;
     private Move move;
-    private MapPoint walkingTarget;
-    private Visualizer debug;
 
-    public Brain(Wizard self, World world, Game game) {}
+    private MapPoint walkingTarget;
+
+    public Brain(Wizard self, World world, Game game) {
+      ENEMY_FRACTION = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
+      HEXAGON_SIZE = self.getRadius();
+
+      Visualizer debugVisualizer = null;
+      try {
+        Class<?> klass = Class.forName("DebugVisualizer");
+        Object instance = klass.getConstructor().newInstance();
+        debugVisualizer = (Visualizer) instance;
+      } catch (ClassNotFoundException e) {
+        // Visualizer is not available.
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+      debug = debugVisualizer;
+
+      random = new Random(game.getRandomSeed());
+
+      // TODO: Don't rely on these in `createMap`.
+      this.self = self;
+      this.world = world;
+      this.game = game;
+      map = createMap();
+    }
 
     public void move(Wizard self, World world, Game game, Move move) {
       initializeTick(self, world, game, move);
-      initializeStrategy();
       updateMap();
 
       MapPoint bestPoint = null;
@@ -294,10 +316,6 @@ public final class MyStrategy implements Strategy {
     }
 
     private void updateMap() {
-      if (map == null) {
-        map = createMap();
-      }
-
       map.values()
           .forEach(
               point -> {
@@ -448,27 +466,6 @@ public final class MyStrategy implements Strategy {
 
       point.setScore(score);
       point.setReachable(isReachable);
-    }
-
-    private void initializeStrategy() {
-      if (random != null) {
-        return;
-      }
-      random = new Random(game.getRandomSeed());
-
-      try {
-        Class<?> klass = Class.forName("DebugVisualizer");
-        Object instance = klass.getConstructor().newInstance();
-        debug = (Visualizer) instance;
-      } catch (ClassNotFoundException e) {
-        // Visualizer is not available.
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-
-      ENEMY_FRACTION = self.getFaction() == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
-
-      HEXAGON_SIZE = self.getRadius();
     }
 
     private Point2D hexToPixel(double q, double r) {
