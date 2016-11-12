@@ -55,6 +55,7 @@ public final class MyStrategy implements Strategy {
   }
 
   private static class Point2D {
+
     private final double x;
     private final double y;
 
@@ -89,6 +90,7 @@ public final class MyStrategy implements Strategy {
   }
 
   private static class FieldPoint extends Point2D {
+
     private List<FieldPoint> neighbors;
     private boolean isReachable;
     private double score;
@@ -126,6 +128,7 @@ public final class MyStrategy implements Strategy {
   }
 
   private static class HexPoint {
+
     private final int q;
     private final int r;
 
@@ -163,19 +166,16 @@ public final class MyStrategy implements Strategy {
 
   private static class Brain {
 
-    private static final double WALKING_RETARGET_THRESHOLD = 10;
     private final Faction ENEMY_FRACTION;
 
     private final Visualizer debug;
     private final Random random;
     private final Field field;
+    private final Walker walker;
 
     private Wizard self;
     private World world;
     private Game game;
-    private Move move;
-
-    private FieldPoint walkingTarget;
 
     public Brain(Wizard self, World world, Game game) {
       this.self = self;
@@ -199,13 +199,14 @@ public final class MyStrategy implements Strategy {
       random = new Random(game.getRandomSeed());
 
       field = new Field(this);
+
+      walker = new Walker(this);
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
       this.self = self;
       this.world = world;
       this.game = game;
-      this.move = move;
 
       field.update();
 
@@ -239,26 +240,26 @@ public final class MyStrategy implements Strategy {
 
       FieldPoint currentPoint = field.getClosestPoint(self.getX(), self.getY());
       List<FieldPoint> path = null;
-      if (walkingTarget == null
-          || !walkingTarget.isReachable()
-          || walkingTarget.getDistanceTo(self) > self.getVisionRange()
-          || bestPoint.getScore() - walkingTarget.getScore() > WALKING_RETARGET_THRESHOLD) {
-        path = findPath(currentPoint, bestPoint);
+      if (walker.target == null
+          || !walker.target.isReachable()
+          || walker.target.getDistanceTo(self) > self.getVisionRange()
+          || bestPoint.getScore() - walker.target.getScore() > walker.RETARGET_THRESHOLD) {
+        path = field.findPath(currentPoint, bestPoint);
         if (path.size() > 1) {
-          walkingTarget = bestPoint;
+          walker.target = bestPoint;
         } else {
           path = null;
         }
       }
       if (path == null) {
-        path = findPath(currentPoint, walkingTarget);
+        path = field.findPath(currentPoint, walker.target);
       }
       FieldPoint nextPoint = path.size() > 1 ? path.get(1) : currentPoint;
 
       if (debug != null) {
         drawHexTile(nextPoint, Color.blue);
         drawPath(path, Color.red);
-        drawHexTile(walkingTarget, Color.red);
+        drawHexTile(walker.target, Color.red);
         debug.drawCircle(bestPoint.getX(), bestPoint.getY(), self.getRadius() / 2, Color.green);
 
         double scoreSpread = bestPoint.getScore() - worstPoint.getScore();
@@ -291,11 +292,11 @@ public final class MyStrategy implements Strategy {
 
       LivingUnit target = getTarget();
 
-      goTo(nextPoint);
+      walker.goTo(nextPoint, move);
       if (target == null) {
-        turnTo(nextPoint);
+        walker.turnTo(nextPoint, move);
       } else {
-        turnTo(new Point2D(target));
+        walker.turnTo(new Point2D(target), move);
         double distance = self.getDistanceTo(target);
         if (distance <= self.getCastRange()) {
           double angle = self.getAngleTo(target);
@@ -332,52 +333,6 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private List<FieldPoint> findPath(FieldPoint start, FieldPoint end) {
-      // Breadth-first search.
-      Map<FieldPoint, FieldPoint> prev = new IdentityHashMap<>();
-      prev.put(start, null);
-      Queue<FieldPoint> queue = new LinkedList<>();
-      queue.add(start);
-      while (!queue.isEmpty()) {
-        FieldPoint point = queue.poll();
-        if (point.equals(end)) {
-          break;
-        }
-        for (FieldPoint neighbor : point.getNeighbors()) {
-          if (neighbor.isReachable() && !prev.containsKey(neighbor)) {
-            prev.put(neighbor, point);
-            queue.add(neighbor);
-
-            if (debug != null) {
-              debug.drawLine(
-                  neighbor.getX(), neighbor.getY(), point.getX(), point.getY(), Color.lightGray);
-            }
-          }
-        }
-      }
-
-      List<FieldPoint> path = new ArrayList<>();
-      for (FieldPoint point = end; point != null; point = prev.get(point)) {
-        path.add(point);
-      }
-      Collections.reverse(path);
-      return path;
-    }
-
-    private void goTo(Point2D point) {
-      double speed = self.getDistanceTo(point.getX(), point.getY());
-      double angle = self.getAngleTo(point.getX(), point.getY());
-      // TODO: Account for the wizard having different speeds in different directions.
-      move.setSpeed(speed * StrictMath.cos(angle));
-      move.setStrafeSpeed(speed * StrictMath.sin(angle));
-    }
-
-    private double turnTo(Point2D point) {
-      double angle = self.getAngleTo(point.getX(), point.getY());
-      move.setTurn(angle);
-      return angle;
-    }
-
     private LivingUnit getTarget() {
       List<LivingUnit> targets = new ArrayList<>();
       targets.addAll(Arrays.asList(world.getBuildings()));
@@ -404,16 +359,17 @@ public final class MyStrategy implements Strategy {
       return bestTarget;
     }
 
-    private boolean isEnemy(LivingUnit unit) {
+    public boolean isEnemy(LivingUnit unit) {
       return unit.getFaction() == ENEMY_FRACTION;
     }
 
-    private boolean isAlly(LivingUnit unit) {
+    public boolean isAlly(LivingUnit unit) {
       return unit.getFaction() == self.getFaction();
     }
   }
 
   private static class Field {
+
     private static final double REACHABILITY_EPS = 3;
     private static final List<HexPoint> HEX_DIRECTIONS =
         Collections.unmodifiableList(
@@ -436,7 +392,7 @@ public final class MyStrategy implements Strategy {
       HEXAGON_SIZE = brain.self.getRadius();
     }
 
-    private void update() {
+    public void update() {
       if (hexToPoint == null) {
         hexToPoint = createHexToPoint();
       }
@@ -448,6 +404,47 @@ public final class MyStrategy implements Strategy {
                   updatePoint(point);
                 }
               });
+    }
+
+    public Collection<FieldPoint> getPoints() {
+      return hexToPoint.values();
+    }
+
+    public FieldPoint getClosestPoint(double x, double y) {
+      // TODO: Handle the case when the hex point is not in the map.
+      return hexToPoint.get(pixelToHex(x, y));
+    }
+
+    public List<FieldPoint> findPath(FieldPoint start, FieldPoint end) {
+      // Breadth-first search.
+      Map<FieldPoint, FieldPoint> prev = new IdentityHashMap<>();
+      prev.put(start, null);
+      Queue<FieldPoint> queue = new LinkedList<>();
+      queue.add(start);
+      while (!queue.isEmpty()) {
+        FieldPoint point = queue.poll();
+        if (point.equals(end)) {
+          break;
+        }
+        for (FieldPoint neighbor : point.getNeighbors()) {
+          if (neighbor.isReachable() && !prev.containsKey(neighbor)) {
+            prev.put(neighbor, point);
+            queue.add(neighbor);
+
+            if (brain.debug != null) {
+              brain.debug.drawLine(
+                  neighbor.getX(), neighbor.getY(), point.getX(), point.getY(), Color.lightGray);
+            }
+          }
+        }
+      }
+
+      List<FieldPoint> path = new ArrayList<>();
+      for (FieldPoint point = end; point != null; point = prev.get(point)) {
+        path.add(point);
+      }
+      Collections.reverse(path);
+      return path;
     }
 
     private void updatePoint(FieldPoint point) {
@@ -597,14 +594,32 @@ public final class MyStrategy implements Strategy {
 
       return Collections.unmodifiableMap(map);
     }
+  }
 
-    public Collection<FieldPoint> getPoints() {
-      return hexToPoint.values();
+  private static class Walker {
+
+    private static final double RETARGET_THRESHOLD = 10;
+
+    private final Brain brain;
+
+    private FieldPoint target;
+
+    private Walker(Brain brain) {
+      this.brain = brain;
     }
 
-    public FieldPoint getClosestPoint(double x, double y) {
-      // TODO: Handle the case when the hex point is not in the map.
-      return hexToPoint.get(pixelToHex(x, y));
+    private void goTo(Point2D point, Move move) {
+      double speed = brain.self.getDistanceTo(point.getX(), point.getY());
+      double angle = brain.self.getAngleTo(point.getX(), point.getY());
+      // TODO: Account for the wizard having different speeds in different directions.
+      move.setSpeed(speed * StrictMath.cos(angle));
+      move.setStrafeSpeed(speed * StrictMath.sin(angle));
+    }
+
+    private double turnTo(Point2D point, Move move) {
+      double angle = brain.self.getAngleTo(point.getX(), point.getY());
+      move.setTurn(angle);
+      return angle;
     }
   }
 }
