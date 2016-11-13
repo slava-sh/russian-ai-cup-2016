@@ -26,6 +26,8 @@ import model.World;
 
 public final class MyStrategy implements Strategy {
 
+  private static final double LOOKAHEAD_TICKS = 10;
+
   private Brain brain;
 
   @Override
@@ -171,6 +173,9 @@ public final class MyStrategy implements Strategy {
                 wizard.getY() + r,
                 Color.red);
           }
+
+          Point2D pos = predictPosition(wizard, LOOKAHEAD_TICKS);
+          debug.drawCircle(pos.getX(), pos.getY(), wizard.getRadius(), Color.lightGray);
         }
 
         debug.drawBeforeScene();
@@ -195,15 +200,21 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public boolean isEnemy(Unit unit) {
+    boolean isEnemy(Unit unit) {
       return unit.getFaction() == ENEMY_FRACTION;
     }
 
-    public boolean isAlly(Unit unit) {
+    boolean isAlly(Unit unit) {
       return unit.getFaction() == ALLY_FRACTION;
     }
 
-    private void drawPath(List<FieldPoint> path, Color color) {
+    Point2D predictPosition(Unit unit, double ticksFromNow) {
+      return new Point2D(
+          unit.getX() + unit.getSpeedX() * ticksFromNow,
+          unit.getY() + unit.getSpeedY() * ticksFromNow);
+    }
+
+    void drawPath(List<FieldPoint> path, Color color) {
       for (int i = 1; i < path.size(); ++i) {
         debug.drawLine(
             path.get(i - 1).getX(),
@@ -214,7 +225,7 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private void drawHexTile(FieldPoint point, Color color) {
+    void drawHexTile(FieldPoint point, Color color) {
       List<FieldPoint> points = point.getNeighbors();
       for (int i = 0; i < points.size(); ++i) {
         int j = (i + 1) % points.size();
@@ -253,7 +264,6 @@ public final class MyStrategy implements Strategy {
 
   private static class Field extends BrainPart {
 
-    private static final double REACHABILITY_EPS = 3;
     private static final List<HexPoint> HEX_DIRECTIONS =
         Collections.unmodifiableList(
             Arrays.asList(
@@ -263,6 +273,7 @@ public final class MyStrategy implements Strategy {
                 new HexPoint(-1, 0),
                 new HexPoint(-1, 1),
                 new HexPoint(0, 1)));
+    private static final double REACHABILITY_EPS = 3;
 
     private final double HEXAGON_SIZE;
 
@@ -337,7 +348,7 @@ public final class MyStrategy implements Strategy {
       score += (StrictMath.round(world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
 
       for (Wizard wizard : world.getWizards()) {
-        double distance = point.getDistanceTo(wizard);
+        double distance = point.getDistanceTo(brain.predictPosition(wizard, LOOKAHEAD_TICKS));
 
         if (!wizard.isMe() && distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
@@ -365,7 +376,7 @@ public final class MyStrategy implements Strategy {
       }
 
       for (Minion minion : world.getMinions()) {
-        double distance = point.getDistanceTo(minion);
+        double distance = point.getDistanceTo(brain.predictPosition(minion, LOOKAHEAD_TICKS));
 
         if (distance < self.getRadius() + minion.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
