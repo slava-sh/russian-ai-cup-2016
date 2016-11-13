@@ -501,7 +501,7 @@ public final class MyStrategy implements Strategy {
 
   private static class Walker extends BrainPart {
 
-    private static final double RETARGET_THRESHOLD = 10;
+    private static final double RETARGET_THRESHOLD = 1;
 
     private FieldPoint target;
 
