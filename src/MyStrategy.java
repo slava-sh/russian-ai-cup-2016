@@ -183,6 +183,15 @@ public final class MyStrategy implements Strategy {
         debug.drawBeforeScene();
       }
 
+      if (debug != null) {
+        debug.showText(
+            walker.target.getX(),
+            walker.target.getY(),
+            ((Number) (int) walker.target.getScore()).toString(),
+            Color.black);
+        debug.drawAfterScene();
+      }
+
       LivingUnit target = shooter.getTarget();
 
       walker.goTo(nextPoint, move);
