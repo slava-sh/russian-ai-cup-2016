@@ -174,8 +174,10 @@ public final class MyStrategy implements Strategy {
                 Color.red);
           }
 
-          Point2D pos = predictPosition(wizard, LOOKAHEAD_TICKS);
-          debug.drawCircle(pos.getX(), pos.getY(), wizard.getRadius(), Color.lightGray);
+          if (!wizard.isMe()) {
+            Point2D pos = predictPosition(wizard, LOOKAHEAD_TICKS);
+            debug.drawCircle(pos.getX(), pos.getY(), wizard.getRadius(), Color.lightGray);
+          }
         }
 
         debug.drawBeforeScene();
@@ -209,9 +211,10 @@ public final class MyStrategy implements Strategy {
     }
 
     Point2D predictPosition(Unit unit, double ticksFromNow) {
+      // TODO: Figure out where the minus sign comes from.
       return new Point2D(
-          unit.getX() + unit.getSpeedX() * ticksFromNow,
-          unit.getY() + unit.getSpeedY() * ticksFromNow);
+          unit.getX() - unit.getSpeedX() * ticksFromNow,
+          unit.getY() - unit.getSpeedY() * ticksFromNow);
     }
 
     void drawPath(List<FieldPoint> path, Color color) {
@@ -348,13 +351,17 @@ public final class MyStrategy implements Strategy {
       score += (StrictMath.round(world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
 
       for (Wizard wizard : world.getWizards()) {
+        if (wizard.isMe()) {
+          continue;
+        }
+
         double distance = point.getDistanceTo(brain.predictPosition(wizard, LOOKAHEAD_TICKS));
 
-        if (!wizard.isMe() && distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
+        if (distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
 
-        if (brain.isAlly(wizard) && !wizard.isMe()) {
+        if (brain.isAlly(wizard)) {
           if (wizard.isMaster() && distance < wizard.getVisionRange() / 3) {
             double MASTER_VISION_RANGE_FACTOR = 20;
             score += MASTER_VISION_RANGE_FACTOR;
