@@ -54,115 +54,6 @@ public final class MyStrategy implements Strategy {
     void showText(double x, double y, String msg, Color color);
   }
 
-  private static class Point2D {
-
-    private final double x;
-    private final double y;
-
-    public Point2D(double x, double y) {
-      this.x = x;
-      this.y = y;
-    }
-
-    public Point2D(Unit unit) {
-      this(unit.getX(), unit.getY());
-    }
-
-    public double getX() {
-      return x;
-    }
-
-    public double getY() {
-      return y;
-    }
-
-    public double getDistanceTo(double x, double y) {
-      return StrictMath.hypot(this.x - x, this.y - y);
-    }
-
-    public double getDistanceTo(Point2D point) {
-      return getDistanceTo(point.x, point.y);
-    }
-
-    public double getDistanceTo(Unit unit) {
-      return getDistanceTo(unit.getX(), unit.getY());
-    }
-  }
-
-  private static class FieldPoint extends Point2D {
-
-    private List<FieldPoint> neighbors;
-    private boolean isReachable;
-    private double score;
-
-    public FieldPoint(Point2D point) {
-      super(point.getX(), point.getY());
-    }
-
-    public List<FieldPoint> getNeighbors() {
-      return neighbors;
-    }
-
-    public void setNeighbors(List<FieldPoint> neighbors) {
-      if (this.neighbors != null) {
-        throw new AssertionError("neighbors are already set.");
-      }
-      this.neighbors = Collections.unmodifiableList(neighbors);
-    }
-
-    public boolean isReachable() {
-      return isReachable;
-    }
-
-    public void setReachable(boolean reachable) {
-      isReachable = reachable;
-    }
-
-    public double getScore() {
-      return score;
-    }
-
-    public void setScore(double score) {
-      this.score = score;
-    }
-  }
-
-  private static class HexPoint {
-
-    private final int q;
-    private final int r;
-
-    public HexPoint(int q, int r) {
-      this.q = q;
-      this.r = r;
-    }
-
-    public int getQ() {
-      return q;
-    }
-
-    public int getR() {
-      return r;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
-
-      HexPoint hexPoint = (HexPoint) o;
-
-      return q == hexPoint.q && r == hexPoint.r;
-    }
-
-    @Override
-    public int hashCode() {
-      int result = q;
-      result = 31 * result + r;
-      return result;
-    }
-  }
-
   private static class Brain {
 
     private final Faction ALLY_FRACTION;
@@ -304,11 +195,11 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public boolean isEnemy(LivingUnit unit) {
+    public boolean isEnemy(Unit unit) {
       return unit.getFaction() == ENEMY_FRACTION;
     }
 
-    public boolean isAlly(LivingUnit unit) {
+    public boolean isAlly(Unit unit) {
       return unit.getFaction() == ALLY_FRACTION;
     }
 
@@ -335,6 +226,29 @@ public final class MyStrategy implements Strategy {
             color);
       }
     }
+  }
+
+  private static class BrainPart {
+
+    protected final Brain brain;
+    protected final Visualizer debug;
+    protected Wizard self;
+    protected World world;
+    protected Game game;
+
+    public BrainPart(Brain brain, Visualizer debug) {
+      this.brain = brain;
+      this.debug = debug;
+    }
+
+    public void update(Wizard self, World world, Game game) {
+      this.self = self;
+      this.world = world;
+      this.game = game;
+      update();
+    }
+
+    protected void update() {}
   }
 
   private static class Field extends BrainPart {
@@ -420,14 +334,12 @@ public final class MyStrategy implements Strategy {
       boolean isReachable = true;
 
       double max_sum = world.getHeight() + world.getWidth();
-      score +=
-          (StrictMath.round(world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
+      score += (StrictMath.round(world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
 
       for (Wizard wizard : world.getWizards()) {
         double distance = point.getDistanceTo(wizard);
 
-        if (!wizard.isMe()
-            && distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
+        if (!wizard.isMe() && distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
 
@@ -492,8 +404,7 @@ public final class MyStrategy implements Strategy {
       }
 
       for (Tree tree : world.getTrees()) {
-        if (point.getDistanceTo(tree)
-            < self.getRadius() + tree.getRadius() + REACHABILITY_EPS) {
+        if (point.getDistanceTo(tree) < self.getRadius() + tree.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
       }
@@ -619,27 +530,112 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private static class BrainPart {
+  private static class Point2D {
 
-    protected final Brain brain;
-    protected final Visualizer debug;
-    protected Wizard self;
-    protected World world;
-    protected Game game;
+    private final double x;
+    private final double y;
 
-    public BrainPart(Brain brain, Visualizer debug) {
-      this.brain = brain;
-      this.debug = debug;
+    public Point2D(double x, double y) {
+      this.x = x;
+      this.y = y;
     }
 
-    public void update(Wizard self, World world, Game game) {
-      this.self = self;
-      this.world = world;
-      this.game = game;
-      update();
+    public Point2D(Unit unit) {
+      this(unit.getX(), unit.getY());
     }
 
-    protected void update() {
+    public double getX() {
+      return x;
+    }
+
+    public double getY() {
+      return y;
+    }
+
+    public double getDistanceTo(double x, double y) {
+      return StrictMath.hypot(this.x - x, this.y - y);
+    }
+
+    public double getDistanceTo(Point2D point) {
+      return getDistanceTo(point.x, point.y);
+    }
+
+    public double getDistanceTo(Unit unit) {
+      return getDistanceTo(unit.getX(), unit.getY());
+    }
+  }
+
+  private static class FieldPoint extends Point2D {
+
+    private List<FieldPoint> neighbors;
+    private boolean isReachable;
+    private double score;
+
+    public FieldPoint(Point2D point) {
+      super(point.getX(), point.getY());
+    }
+
+    public List<FieldPoint> getNeighbors() {
+      return neighbors;
+    }
+
+    public void setNeighbors(List<FieldPoint> neighbors) {
+      if (this.neighbors != null) {
+        throw new AssertionError("neighbors are already set.");
+      }
+      this.neighbors = Collections.unmodifiableList(neighbors);
+    }
+
+    public boolean isReachable() {
+      return isReachable;
+    }
+
+    public void setReachable(boolean reachable) {
+      isReachable = reachable;
+    }
+
+    public double getScore() {
+      return score;
+    }
+
+    public void setScore(double score) {
+      this.score = score;
+    }
+  }
+
+  private static class HexPoint {
+
+    private final int q;
+    private final int r;
+
+    public HexPoint(int q, int r) {
+      this.q = q;
+      this.r = r;
+    }
+
+    public int getQ() {
+      return q;
+    }
+
+    public int getR() {
+      return r;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      HexPoint hexPoint = (HexPoint) o;
+
+      return q == hexPoint.q && r == hexPoint.r;
+    }
+
+    @Override
+    public int hashCode() {
+      int result = q;
+      result = 31 * result + r;
+      return result;
     }
   }
 }
