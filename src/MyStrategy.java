@@ -222,8 +222,8 @@ public final class MyStrategy implements Strategy {
     Point2D predictPosition(Unit unit, double ticksFromNow) {
       // TODO: Figure out where the minus sign comes from.
       return new Point2D(
-          unit.getX() - unit.getSpeedX() * ticksFromNow,
-          unit.getY() - unit.getSpeedY() * ticksFromNow);
+          unit.getX() + unit.getSpeedX() * ticksFromNow,
+          unit.getY() + unit.getSpeedY() * ticksFromNow);
     }
 
     void drawPath(List<FieldPoint> path, Color color) {
@@ -354,6 +354,7 @@ public final class MyStrategy implements Strategy {
 
     private void updatePoint(FieldPoint point) {
       double score = 0;
+      double enemy_factor = 0;
       boolean isReachable = true;
 
       double max_sum = world.getHeight() + world.getWidth();
@@ -388,6 +389,11 @@ public final class MyStrategy implements Strategy {
             double TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR = -10;
             score += TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR;
           }
+        } else {
+          if (distance < wizard.getCastRange()) {
+            double ENEMY_WIZARD_CAST_RANGE_FACTOR = -5;
+            enemy_factor += ENEMY_WIZARD_CAST_RANGE_FACTOR;
+          }
         }
       }
 
@@ -398,9 +404,9 @@ public final class MyStrategy implements Strategy {
           isReachable = false;
         }
 
-        if (brain.isAlly(minion)) {
-          double angle = minion.getAngleTo(point.getX(), point.getY());
+        double angle = minion.getAngleTo(point.getX(), point.getY());
 
+        if (brain.isAlly(minion)) {
           if (minion.getType() == MinionType.ORC_WOODCUTTER && distance < minion.getVisionRange()) {
             // TODO: Discount for rotation time.
             double ALLY_WOODCUTTER_VISION_RANGE_FACTOR = 3;
@@ -413,6 +419,20 @@ public final class MyStrategy implements Strategy {
             // TODO: Discount for rotation time.
             double ALLY_FETISH_VISION_RANGE_FACTOR = 5;
             score += ALLY_FETISH_VISION_RANGE_FACTOR;
+          }
+        } else {
+          if (minion.getType() == MinionType.ORC_WOODCUTTER && distance < minion.getVisionRange()) {
+            // TODO: Discount for rotation time.
+            double ENEMY_WOODCUTTER_VISION_RANGE_FACTOR = -1;
+            enemy_factor += ENEMY_WOODCUTTER_VISION_RANGE_FACTOR;
+          }
+
+          if (minion.getType() == MinionType.FETISH_BLOWDART
+              && distance < minion.getVisionRange()) {
+            //if (StrictMath.abs(angle) < game.getFetishBlowdartAttackSector() / 2 * 2) {
+            // TODO: Discount for rotation time.
+            double ENEMY_FETISH_VISION_RANGE_FACTOR = -2;
+            enemy_factor += ENEMY_FETISH_VISION_RANGE_FACTOR;
           }
         }
       }
@@ -427,6 +447,11 @@ public final class MyStrategy implements Strategy {
             double ALLY_BUILDING_VISION_RANGE_FACTOR = 0;
             score += ALLY_BUILDING_VISION_RANGE_FACTOR;
           }
+        } else {
+          if (distance < building.getVisionRange()) {
+            double ENEMY_BUILDING_VISION_RANGE_FACTOR = -5;
+            enemy_factor += ENEMY_BUILDING_VISION_RANGE_FACTOR;
+          }
         }
       }
 
@@ -434,7 +459,14 @@ public final class MyStrategy implements Strategy {
         if (point.getDistanceTo(tree) < self.getRadius() + tree.getRadius() + REACHABILITY_EPS) {
           isReachable = false;
         }
+        if (point.getDistanceTo(tree) < HEXAGON_SIZE * 3) {
+          double CLOSE_TO_TREE_FACTOR = -3;
+          score += CLOSE_TO_TREE_FACTOR;
+        }
       }
+
+      enemy_factor *= 1 + (1 - self.getLife() / self.getMaxLife());
+      score += enemy_factor;
 
       point.setScore(score);
       point.setReachable(isReachable);
@@ -531,14 +563,21 @@ public final class MyStrategy implements Strategy {
     }
 
     public LivingUnit getTarget() {
-      List<LivingUnit> targets = new ArrayList<>();
-      targets.addAll(Arrays.asList(world.getBuildings()));
-      targets.addAll(Arrays.asList(world.getWizards()));
-      targets.addAll(Arrays.asList(world.getMinions()));
+      LivingUnit buildingTarget = getTargetHomo(world.getBuildings());
+      LivingUnit wizardTarget = getTargetHomo(world.getWizards());
+      if (buildingTarget == null && wizardTarget == null) {
+        return getTargetHomo(world.getMinions());
+      }
+      if (buildingTarget == null) {
+        return wizardTarget;
+      }
+      return buildingTarget;
+    }
 
+    private LivingUnit getTargetHomo(LivingUnit[] units) {
       LivingUnit bestTarget = null;
 
-      for (LivingUnit target : targets) {
+      for (LivingUnit target : units) {
         if (!brain.isEnemy(target)) {
           continue;
         }
