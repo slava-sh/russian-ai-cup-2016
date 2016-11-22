@@ -3,6 +3,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedList;
@@ -16,6 +17,7 @@ import model.ActionType;
 import model.Building;
 import model.Faction;
 import model.Game;
+import model.LaneType;
 import model.LivingUnit;
 import model.Minion;
 import model.MinionType;
@@ -89,10 +91,6 @@ public final class MyStrategy implements Strategy {
     private final Walker walker;
     private final Shooter shooter;
 
-    Point2D debugTarget;
-    double debugAngle;
-    int debugPeriod = 150;
-
     public Brain(Wizard self, World world, Game game) {
       ALLY_FRACTION = self.getFaction();
       ENEMY_FRACTION = ALLY_FRACTION == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
@@ -110,31 +108,20 @@ public final class MyStrategy implements Strategy {
       debug = debugVisualizer;
 
       random = new Random(game.getRandomSeed());
-      //field = new Field(this, debug, self);
+      field = new Field(this, debug, self, game);
       walker = new Walker(this, debug);
       //shooter = new Shooter(this, debug);
-      field = null;
       shooter = null;
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
-      //field.update(self, world, game);
+      field.update(self, world, game);
       walker.update(self, world, game);
       //shooter.update(self, world, game);
 
-      if (world.getTickIndex() % debugPeriod == 0) {
-        debugTarget =
-            new Point2D(
-                random.nextDouble() * world.getWidth(), random.nextDouble() * world.getHeight());
-        debugAngle = (random.nextDouble() * 2 - 1) * StrictMath.PI;
-      }
-      debug.fillCircle(debugTarget.getX(), debugTarget.getY(), 10, Color.blue);
-      debug.drawLine(self.getX(), self.getY(), debugTarget.getX(), debugTarget.getY(), Color.blue);
-
-      walker.goTo(debugTarget, move);
-      move.setAction(ActionType.STAFF);
-
-      move.setTurn(Math.PI * 2 / debugPeriod);
+      Point2D target = field.getNextWaypoint();
+      walker.goTo(target, move);
+      walker.turnTo(target, move);
 
       debug.drawBeforeScene();
     }
@@ -216,16 +203,98 @@ public final class MyStrategy implements Strategy {
     private static final double REACHABILITY_EPS = 3;
 
     private final double HEXAGON_SIZE;
+    private final Map<LaneType, Point2D[]> waypointsByLane = new EnumMap<>(LaneType.class);
 
     private Map<HexPoint, FieldPoint> hexToPoint;
 
-    public Field(Brain brain, Visualizer debug, Wizard self) {
+    public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
       HEXAGON_SIZE = self.getRadius();
+
+      double mapSize = game.getMapSize();
+
+      waypointsByLane.put(
+          LaneType.MIDDLE,
+          new Point2D[] {
+            new Point2D(100.0D, mapSize - 100.0D),
+            new Point2D(200.0D, mapSize - 600.0D),
+            new Point2D(800.0D, mapSize - 800.0D),
+            new Point2D(mapSize - 600.0D, 600.0D)
+          });
+
+      waypointsByLane.put(
+          LaneType.TOP,
+          new Point2D[] {
+            new Point2D(100.0D, mapSize - 100.0D),
+            new Point2D(100.0D, mapSize - 400.0D),
+            new Point2D(200.0D, mapSize - 800.0D),
+            new Point2D(200.0D, mapSize * 0.75D),
+            new Point2D(200.0D, mapSize * 0.5D),
+            new Point2D(200.0D, mapSize * 0.25D),
+            new Point2D(200.0D, 200.0D),
+            new Point2D(mapSize * 0.25D, 200.0D),
+            new Point2D(mapSize * 0.5D, 200.0D),
+            new Point2D(mapSize * 0.75D, 200.0D),
+            new Point2D(mapSize - 200.0D, 200.0D)
+          });
+
+      waypointsByLane.put(
+          LaneType.BOTTOM,
+          new Point2D[] {
+            new Point2D(100.0D, mapSize - 100.0D),
+            new Point2D(400.0D, mapSize - 100.0D),
+            new Point2D(800.0D, mapSize - 200.0D),
+            new Point2D(mapSize * 0.25D, mapSize - 200.0D),
+            new Point2D(mapSize * 0.5D, mapSize - 200.0D),
+            new Point2D(mapSize * 0.75D, mapSize - 200.0D),
+            new Point2D(mapSize - 200.0D, mapSize - 200.0D),
+            new Point2D(mapSize - 200.0D, mapSize * 0.75D),
+            new Point2D(mapSize - 200.0D, mapSize * 0.5D),
+            new Point2D(mapSize - 200.0D, mapSize * 0.25D),
+            new Point2D(mapSize - 200.0D, 200.0D)
+          });
     }
 
     @Override
     public void update() {
+      if (debug != null) {
+        for (Point2D[] waypoints : waypointsByLane.values()) {
+          for (int i = 0; i < waypoints.length; ++i) {
+            debug.fillCircle(waypoints[i].getX(), waypoints[i].getY(), 5, Color.lightGray);
+            if (i != 0) {
+              debug.drawLine(
+                  waypoints[i - 1].getX(),
+                  waypoints[i - 1].getY(),
+                  waypoints[i].getX(),
+                  waypoints[i].getY(),
+                  Color.lightGray);
+            }
+          }
+        }
+      }
+    }
+
+    private Point2D getNextWaypoint() {
+      Point2D[] waypoints = waypointsByLane.get(LaneType.MIDDLE);
+      int lastWaypointIndex = waypoints.length - 1;
+      Point2D lastWaypoint = waypoints[lastWaypointIndex];
+
+      for (int waypointIndex = 0; waypointIndex < lastWaypointIndex; ++waypointIndex) {
+        Point2D waypoint = waypoints[waypointIndex];
+
+        if (waypoint.getDistanceTo(self) <= self.getRadius()) {
+          return waypoints[waypointIndex + 1];
+        }
+
+        if (lastWaypoint.getDistanceTo(waypoint) < lastWaypoint.getDistanceTo(self)) {
+          return waypoint;
+        }
+      }
+
+      return lastWaypoint;
+    }
+
+    public void oldUpdate() {
       if (hexToPoint == null) {
         hexToPoint = createHexToPoint();
       }
@@ -572,10 +641,9 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public double turnTo(Point2D point, Move move) {
+    public void turnTo(Point2D point, Move move) {
       double angle = self.getAngleTo(point.getX(), point.getY());
       move.setTurn(angle);
-      return angle;
     }
   }
 
