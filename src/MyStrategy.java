@@ -29,7 +29,6 @@ import model.World;
 
 public final class MyStrategy implements Strategy {
 
-  private static final double MAX_CAST_ANGLE = Math.PI / 12;
   private static final double LOOKAHEAD_TICKS = 10;
 
   private Brain brain;
@@ -112,6 +111,13 @@ public final class MyStrategy implements Strategy {
       field = new Field(this, debug, self, game);
       walker = new Walker(this, debug);
       shooter = new Shooter(this, debug);
+
+      if (debug != null) {
+        System.out.println("Staff damage: " + game.getStaffDamage());
+        System.out.println("Missile damage: " + game.getMagicMissileDirectDamage());
+        System.out.println("Staff cooldown: " + game.getStaffCooldownTicks());
+        System.out.println("Missile cooldown: " + game.getMagicMissileCooldownTicks());
+      }
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
@@ -600,40 +606,44 @@ public final class MyStrategy implements Strategy {
 
       if (debug != null) {
         double t = 30;
-        List<Point2D> box = new ArrayList<>();
-        box.add(
-            new Point2D(
-                self.getX() + t * game.getWizardForwardSpeed() * Math.cos(self.getAngle()),
-                self.getY() + t * game.getWizardForwardSpeed() * Math.sin(self.getAngle())));
-        box.add(
-            new Point2D(
-                self.getX()
-                    + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
-                self.getY()
-                    + t * game.getWizardStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2)));
-        box.add(
-            new Point2D(
-                self.getX()
-                    + t * game.getWizardBackwardSpeed() * Math.cos(self.getAngle() + Math.PI),
-                self.getY()
-                    + t * game.getWizardBackwardSpeed() * Math.sin(self.getAngle() + Math.PI)));
-        box.add(
-            new Point2D(
-                self.getX()
-                    + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI * 3 / 2),
-                self.getY()
-                    + t
-                        * game.getWizardStrafeSpeed()
-                        * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
-        for (int i = 0; i < box.size(); ++i) {
-          int j = (i + 1) % box.size();
-          // debug.fillCircle(box.get(i).getX(), box.get(i).getY(), 5, Color.blue);
-          debug.drawLine(
-              box.get(i).getX(),
-              box.get(i).getY(),
-              box.get(j).getX(),
-              box.get(j).getY(),
-              Color.blue);
+
+        boolean DISPLAY_BOX = false;
+        if (DISPLAY_BOX) {
+          List<Point2D> box = new ArrayList<>();
+          box.add(
+              new Point2D(
+                  self.getX() + t * game.getWizardForwardSpeed() * Math.cos(self.getAngle()),
+                  self.getY() + t * game.getWizardForwardSpeed() * Math.sin(self.getAngle())));
+          box.add(
+              new Point2D(
+                  self.getX()
+                      + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
+                  self.getY()
+                      + t * game.getWizardStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2)));
+          box.add(
+              new Point2D(
+                  self.getX()
+                      + t * game.getWizardBackwardSpeed() * Math.cos(self.getAngle() + Math.PI),
+                  self.getY()
+                      + t * game.getWizardBackwardSpeed() * Math.sin(self.getAngle() + Math.PI)));
+          box.add(
+              new Point2D(
+                  self.getX()
+                      + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI * 3 / 2),
+                  self.getY()
+                      + t
+                      * game.getWizardStrafeSpeed()
+                      * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
+          for (int i = 0; i < box.size(); ++i) {
+            int j = (i + 1) % box.size();
+            // debug.fillCircle(box.get(i).getX(), box.get(i).getY(), 5, Color.blue);
+            debug.drawLine(
+                box.get(i).getX(),
+                box.get(i).getY(),
+                box.get(j).getX(),
+                box.get(j).getY(),
+                Color.blue);
+          }
         }
 
         //debug.drawLine(
@@ -688,9 +698,16 @@ public final class MyStrategy implements Strategy {
             self.getX(),
             self.getY(),
             self.getCastRange(),
-            self.getAngle() - MAX_CAST_ANGLE,
-            2 * MAX_CAST_ANGLE,
+            self.getAngle() - game.getStaffSector() / 2,
+            game.getStaffSector(),
             Color.pink);
+        brain.drawWaves(
+            self.getX(),
+            self.getY(),
+            game.getStaffRange(),
+            self.getAngle() - game.getStaffSector() / 2,
+            game.getStaffSector(),
+            Color.red);
       }
     }
 
