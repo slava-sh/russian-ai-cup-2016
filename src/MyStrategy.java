@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
+import java.util.function.Predicate;
 
 import model.ActionType;
 import model.Building;
@@ -29,6 +30,19 @@ public final class MyStrategy implements Strategy {
   private static final double LOOKAHEAD_TICKS = 10;
 
   private Brain brain;
+
+  private static double binarySearch(double a, double b, Predicate<Double> p) {
+    final double tolerance = 1e-6;
+    for (int i = 0; b - a > tolerance && i < 50; ++i) {
+      double m = (a + b) / 2;
+      if (p.test(m)) {
+        a = m;
+      } else {
+        b = m;
+      }
+    }
+    return a;
+  }
 
   @Override
   public void move(Wizard self, World world, Game game, Move move) {
@@ -75,6 +89,10 @@ public final class MyStrategy implements Strategy {
     private final Walker walker;
     private final Shooter shooter;
 
+    Point2D debugTarget;
+    double debugAngle;
+    int debugPeriod = 150;
+
     public Brain(Wizard self, World world, Game game) {
       ALLY_FRACTION = self.getFaction();
       ENEMY_FRACTION = ALLY_FRACTION == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
@@ -92,131 +110,33 @@ public final class MyStrategy implements Strategy {
       debug = debugVisualizer;
 
       random = new Random(game.getRandomSeed());
-      field = new Field(this, debug, self);
+      //field = new Field(this, debug, self);
       walker = new Walker(this, debug);
-      shooter = new Shooter(this, debug);
+      //shooter = new Shooter(this, debug);
+      field = null;
+      shooter = null;
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
-      field.update(self, world, game);
+      //field.update(self, world, game);
       walker.update(self, world, game);
-      shooter.update(self, world, game);
+      //shooter.update(self, world, game);
 
-      FieldPoint bestPoint = null;
-      FieldPoint worstPoint = null;
-      for (FieldPoint point : field.getPoints()) {
-        if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
-          continue;
-        }
-
-        if (bestPoint == null) {
-          bestPoint = point;
-          worstPoint = point;
-        } else {
-          if (point.getScore() > bestPoint.getScore()) {
-            bestPoint = point;
-          }
-          if (point.getScore() < worstPoint.getScore()) {
-            worstPoint = point;
-          }
-        }
-
-        if (debug != null) {
-          debug.showText(
-              point.getX(),
-              point.getY(),
-              ((Number) (int) point.getScore()).toString(),
-              Color.black);
-        }
+      if (world.getTickIndex() % debugPeriod == 0) {
+        debugTarget =
+            new Point2D(
+                random.nextDouble() * world.getWidth(), random.nextDouble() * world.getHeight());
+        debugAngle = (random.nextDouble() * 2 - 1) * StrictMath.PI;
       }
+      debug.fillCircle(debugTarget.getX(), debugTarget.getY(), 10, Color.blue);
+      debug.drawLine(self.getX(), self.getY(), debugTarget.getX(), debugTarget.getY(), Color.blue);
 
-      if (bestPoint == null) {
-        throw new AssertionError("bestPoint is null.");
-      }
+      walker.goTo(debugTarget, move);
+      move.setAction(ActionType.STAFF);
 
-      FieldPoint currentPoint = field.getClosestPoint(self.getX(), self.getY());
-      List<FieldPoint> path = null;
-      if (walker.target == null
-          || !walker.target.isReachable()
-          || walker.target.getDistanceTo(self) > self.getVisionRange()
-          || bestPoint.getScore() - walker.target.getScore() > Walker.RETARGET_THRESHOLD) {
-        path = field.findPath(currentPoint, bestPoint);
-        if (path.size() > 1) {
-          walker.target = bestPoint;
-        } else {
-          path = null;
-        }
-      }
-      if (path == null) {
-        path = field.findPath(currentPoint, walker.target);
-      }
-      FieldPoint nextPoint = path.size() > 1 ? path.get(1) : currentPoint;
+      move.setTurn(Math.PI * 2 / debugPeriod);
 
-      if (debug != null) {
-        drawHexTile(nextPoint, Color.blue);
-        drawPath(path, Color.red);
-        drawHexTile(walker.target, Color.red);
-        debug.drawCircle(bestPoint.getX(), bestPoint.getY(), self.getRadius() / 2, Color.green);
-
-        double scoreSpread = bestPoint.getScore() - worstPoint.getScore();
-        for (FieldPoint point : field.getPoints()) {
-          if (!point.isReachable() || point.getDistanceTo(self) > self.getVisionRange()) {
-            continue;
-          }
-          double normedScore = (point.getScore() - worstPoint.getScore()) / scoreSpread;
-          double k = StrictMath.max(0, StrictMath.min(1, 1 - StrictMath.max(0.3, normedScore)));
-          Color color = new Color((float) k, 1f, (float) k);
-          debug.fillCircle(point.getX(), point.getY(), 3, color);
-        }
-
-        debug.drawCircle(self.getX(), self.getY(), self.getVisionRange(), Color.lightGray);
-
-        for (Wizard wizard : world.getWizards()) {
-          if (wizard.isMaster()) {
-            double r = wizard.getRadius() / 2;
-            debug.fillRect(
-                wizard.getX() - r,
-                wizard.getY() - r,
-                wizard.getX() + r,
-                wizard.getY() + r,
-                Color.red);
-          }
-
-          if (!wizard.isMe()) {
-            Point2D pos = predictPosition(wizard, LOOKAHEAD_TICKS);
-            debug.drawCircle(pos.getX(), pos.getY(), wizard.getRadius(), Color.lightGray);
-          }
-        }
-
-        debug.drawBeforeScene();
-      }
-
-      if (debug != null) {
-        debug.showText(
-            walker.target.getX(),
-            walker.target.getY(),
-            ((Number) (int) walker.target.getScore()).toString(),
-            Color.black);
-        debug.drawAfterScene();
-      }
-
-      LivingUnit target = shooter.getTarget();
-
-      walker.goTo(nextPoint, move);
-      if (target == null) {
-        walker.turnTo(nextPoint, move);
-      } else {
-        walker.turnTo(new Point2D(target), move);
-        double distance = self.getDistanceTo(target);
-        if (distance <= self.getCastRange()) {
-          double angle = self.getAngleTo(target);
-          if (StrictMath.abs(angle) < game.getStaffSector() / 2.0D) {
-            move.setAction(ActionType.MAGIC_MISSILE);
-            move.setCastAngle(angle);
-            move.setMinCastDistance(distance - target.getRadius() + game.getMagicMissileRadius());
-          }
-        }
-      }
+      debug.drawBeforeScene();
     }
 
     boolean isEnemy(Unit unit) {
@@ -259,7 +179,7 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private static class BrainPart {
+  private abstract static class BrainPart {
 
     protected final Brain brain;
     protected final Visualizer debug;
@@ -549,12 +469,107 @@ public final class MyStrategy implements Strategy {
       super(brain, debug);
     }
 
-    public void goTo(Point2D point, Move move) {
-      double speed = self.getDistanceTo(point.getX(), point.getY());
-      double angle = self.getAngleTo(point.getX(), point.getY());
-      // TODO: Account for the wizard having different speeds in different directions.
-      move.setSpeed(speed * StrictMath.cos(angle));
-      move.setStrafeSpeed(speed * StrictMath.sin(angle));
+    public void goTo(Point2D target, Move move) {
+      double angle = self.getAngleTo(target.getX(), target.getY());
+
+      int aSign = Math.abs(angle) < Math.PI / 2 ? 1 : -1;
+      Point2D a =
+          aSign == 1
+              ? Point2D.fromPolar(game.getWizardForwardSpeed(), self.getAngle())
+              : Point2D.fromPolar(game.getWizardBackwardSpeed(), self.getAngle()).negate();
+
+      int bSign = angle > 0 ? 1 : -1;
+      Point2D b =
+          bSign == 1
+              ? Point2D.fromPolar(game.getWizardStrafeSpeed(), self.getAngle() + Math.PI / 2)
+              : Point2D.fromPolar(game.getWizardStrafeSpeed(), self.getAngle() - Math.PI / 2);
+
+      Point2D ba = a.sub(b);
+      boolean aIsClockwiseToB = a.isClockwiseTo(b);
+      Point2D direction = target.sub(new Point2D(self));
+      double k =
+          binarySearch(
+              0,
+              1,
+              m -> {
+                Point2D v = direction.mul(m);
+                Point2D bv = v.sub(b);
+                return bv.isClockwiseTo(ba) == aIsClockwiseToB;
+              });
+
+      // Speed.
+      Point2D v = direction.mul(k);
+
+      move.setSpeed(aSign * v.project(a));
+      move.setStrafeSpeed(bSign * v.project(b));
+
+      if (debug != null) {
+        double t = 30;
+        List<Point2D> box = new ArrayList<>();
+        box.add(
+            new Point2D(
+                self.getX() + t * game.getWizardForwardSpeed() * Math.cos(self.getAngle()),
+                self.getY() + t * game.getWizardForwardSpeed() * Math.sin(self.getAngle())));
+        box.add(
+            new Point2D(
+                self.getX()
+                    + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
+                self.getY()
+                    + t * game.getWizardStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2)));
+        box.add(
+            new Point2D(
+                self.getX()
+                    + t * game.getWizardBackwardSpeed() * Math.cos(self.getAngle() + Math.PI),
+                self.getY()
+                    + t * game.getWizardBackwardSpeed() * Math.sin(self.getAngle() + Math.PI)));
+        box.add(
+            new Point2D(
+                self.getX()
+                    + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI * 3 / 2),
+                self.getY()
+                    + t
+                        * game.getWizardStrafeSpeed()
+                        * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
+        for (int i = 0; i < box.size(); ++i) {
+          int j = (i + 1) % box.size();
+          // debug.fillCircle(box.get(i).getX(), box.get(i).getY(), 5, Color.blue);
+          debug.drawLine(
+              box.get(i).getX(),
+              box.get(i).getY(),
+              box.get(j).getX(),
+              box.get(j).getY(),
+              Color.blue);
+        }
+
+        //debug.drawLine(
+        //    self.getX(),
+        //    self.getY(),
+        //    self.getX() + t * a.getX(),
+        //    self.getY() + t * a.getY(),
+        //    Color.magenta);
+        //debug.drawLine(
+        //    self.getX(),
+        //    self.getY(),
+        //    self.getX() + t * b.getX(),
+        //    self.getY() + t * b.getY(),
+        //    Color.cyan);
+        //debug.drawLine(
+        //    self.getX(),
+        //    self.getY(),
+        //    self.getX() + t * v.getX(),
+        //    self.getY() + t * v.getY(),
+        //    Color.red);
+        //debug.fillCircle(
+        //    self.getX()
+        //        + t * move.getSpeed() * Math.cos(self.getAngle())
+        //        + t * move.getStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
+        //    self.getY()
+        //        + t * move.getSpeed() * Math.sin(self.getAngle())
+        //        + t * move.getStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2),
+        //    5,
+        //    Color.orange);
+        debug.fillCircle(self.getX() + t * v.getX(), self.getY() + t * v.getY(), 5, Color.red);
+      }
     }
 
     public double turnTo(Point2D point, Move move) {
@@ -618,6 +633,10 @@ public final class MyStrategy implements Strategy {
       this(unit.getX(), unit.getY());
     }
 
+    public static Point2D fromPolar(double radius, double angle) {
+      return new Point2D(radius * Math.cos(angle), radius * Math.sin(angle));
+    }
+
     public double getX() {
       return x;
     }
@@ -636,6 +655,47 @@ public final class MyStrategy implements Strategy {
 
     public double getDistanceTo(Unit unit) {
       return getDistanceTo(unit.getX(), unit.getY());
+    }
+
+    public Point2D negate() {
+      return new Point2D(-x, -y);
+    }
+
+    public Point2D unit() {
+      double len = length();
+      return new Point2D(x / len, y / len);
+    }
+
+    public double length() {
+      return Math.sqrt(x * x + y * y);
+    }
+
+    public Point2D mul(double k) {
+      return new Point2D(k * x, k * y);
+    }
+
+    public Point2D add(Point2D other) {
+      return new Point2D(this.x + other.x, this.y + other.y);
+    }
+
+    public Point2D sub(Point2D other) {
+      return new Point2D(this.x - other.x, this.y - other.y);
+    }
+
+    public double dot(Point2D other) {
+      return this.x * other.x + this.y * other.y;
+    }
+
+    public double cross(Point2D other) {
+      return this.x * other.y - this.y * other.x;
+    }
+
+    public boolean isClockwiseTo(Point2D other) {
+      return cross(other) < 0;
+    }
+
+    public double project(Point2D other) {
+      return this.dot(other.unit());
     }
   }
 
