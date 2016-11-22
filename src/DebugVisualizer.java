@@ -88,7 +88,7 @@ public class DebugVisualizer implements MyStrategy.Visualizer {
   public void drawArc(
       double x, double y, double radius, double startAngle, double arcAngle, Color color) {
     Formatter f = new Formatter();
-    sendCommand(
+    queueCommand(
         f.format(
                 "arc %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f",
                 x,
@@ -105,7 +105,7 @@ public class DebugVisualizer implements MyStrategy.Visualizer {
   public void fillArc(
       double x, double y, double radius, double startAngle, double arcAngle, Color color) {
     Formatter f = new Formatter();
-    sendCommand(
+    queueCommand(
         f.format(
                 "fill_arc %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f",
                 x,
