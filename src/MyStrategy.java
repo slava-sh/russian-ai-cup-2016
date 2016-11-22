@@ -29,6 +29,7 @@ import model.World;
 
 public final class MyStrategy implements Strategy {
 
+  private static final double MAX_CAST_ANGLE = Math.PI / 12;
   private static final double LOOKAHEAD_TICKS = 10;
 
   private Brain brain;
@@ -110,18 +111,34 @@ public final class MyStrategy implements Strategy {
       random = new Random(game.getRandomSeed());
       field = new Field(this, debug, self, game);
       walker = new Walker(this, debug);
-      //shooter = new Shooter(this, debug);
-      shooter = null;
+      shooter = new Shooter(this, debug);
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
       field.update(self, world, game);
       walker.update(self, world, game);
-      //shooter.update(self, world, game);
+      shooter.update(self, world, game);
 
-      Point2D target = field.getNextWaypoint();
-      walker.goTo(target, move);
-      walker.turnTo(target, move);
+      Point2D walkingTarget = field.getNextWaypoint();
+      LivingUnit shootingTarget = shooter.getTarget();
+
+      walker.goTo(walkingTarget, move);
+
+      if (shootingTarget == null) {
+        walker.turnTo(walkingTarget, move);
+      } else {
+        walker.turnTo(new Point2D(shootingTarget), move);
+        double distance = self.getDistanceTo(shootingTarget);
+        if (distance <= self.getCastRange()) {
+          double angle = self.getAngleTo(shootingTarget);
+          if (StrictMath.abs(angle) < game.getStaffSector() / 2.0D) {
+            move.setAction(ActionType.MAGIC_MISSILE);
+            move.setCastAngle(angle);
+            move.setMinCastDistance(
+                distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
+          }
+        }
+      }
 
       debug.drawBeforeScene();
     }
@@ -139,6 +156,14 @@ public final class MyStrategy implements Strategy {
       return new Point2D(
           unit.getX() + unit.getSpeedX() * ticksFromNow,
           unit.getY() + unit.getSpeedY() * ticksFromNow);
+    }
+
+    void drawWaves(
+        double x, double y, double radius, double startAngle, double arcAngle, Color color) {
+      final int N = 10;
+      for (int i = 1; i <= N; ++i) {
+        debug.drawArc(x, y, radius * i / N, startAngle, arcAngle, color);
+      }
     }
 
     void drawPath(List<FieldPoint> path, Color color) {
@@ -541,6 +566,7 @@ public final class MyStrategy implements Strategy {
     public void goTo(Point2D target, Move move) {
       double angle = self.getAngleTo(target.getX(), target.getY());
 
+      // TODO: Add bonus effects.
       int aSign = Math.abs(angle) < Math.PI / 2 ? 1 : -1;
       Point2D a =
           aSign == 1
@@ -651,6 +677,21 @@ public final class MyStrategy implements Strategy {
 
     public Shooter(Brain brain, Visualizer debug) {
       super(brain, debug);
+    }
+
+    @Override
+    protected void update() {
+      if (debug != null) {
+        debug.drawCircle(self.getX(), self.getY(), self.getVisionRange(), Color.lightGray);
+        debug.drawCircle(self.getX(), self.getY(), self.getCastRange(), Color.lightGray);
+        brain.drawWaves(
+            self.getX(),
+            self.getY(),
+            self.getCastRange(),
+            self.getAngle() - MAX_CAST_ANGLE,
+            2 * MAX_CAST_ANGLE,
+            Color.pink);
+      }
     }
 
     public LivingUnit getTarget() {
