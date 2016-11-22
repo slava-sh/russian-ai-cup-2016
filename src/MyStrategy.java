@@ -23,6 +23,7 @@ import model.LivingUnit;
 import model.Minion;
 import model.MinionType;
 import model.Move;
+import model.StatusType;
 import model.Tree;
 import model.Unit;
 import model.Wizard;
@@ -736,18 +737,26 @@ public final class MyStrategy implements Strategy {
     public void goTo(Point2D target, Move move) {
       double angle = self.getAngleTo(target.getX(), target.getY());
 
-      // TODO: Add bonus effects.
+      boolean hastened =
+          Arrays.asList(self.getStatuses())
+              .stream()
+              .anyMatch(s -> s.getType() == StatusType.HASTENED);
+      double speedMultiplier = hastened ? 1 + game.getHastenedMovementBonusFactor() : 1;
+
       int aSign = Math.abs(angle) < Math.PI / 2 ? 1 : -1;
       Point2D a =
           aSign == 1
-              ? Point2D.fromPolar(game.getWizardForwardSpeed(), self.getAngle())
-              : Point2D.fromPolar(game.getWizardBackwardSpeed(), self.getAngle()).negate();
+              ? Point2D.fromPolar(speedMultiplier * game.getWizardForwardSpeed(), self.getAngle())
+              : Point2D.fromPolar(speedMultiplier * game.getWizardBackwardSpeed(), self.getAngle())
+                  .negate();
 
       int bSign = angle > 0 ? 1 : -1;
       Point2D b =
           bSign == 1
-              ? Point2D.fromPolar(game.getWizardStrafeSpeed(), self.getAngle() + Math.PI / 2)
-              : Point2D.fromPolar(game.getWizardStrafeSpeed(), self.getAngle() - Math.PI / 2);
+              ? Point2D.fromPolar(
+                  speedMultiplier * game.getWizardStrafeSpeed(), self.getAngle() + Math.PI / 2)
+              : Point2D.fromPolar(
+                  speedMultiplier * game.getWizardStrafeSpeed(), self.getAngle() - Math.PI / 2);
 
       Point2D ba = a.sub(b);
       boolean aIsClockwiseToB = a.isClockwiseTo(b);
