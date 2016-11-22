@@ -172,15 +172,17 @@ public final class MyStrategy implements Strategy {
           }
         }
 
-        int N = 5;
-        double R = self.getCastRange() * 2 / 3;
-        for (double dx = -R; dx < R; dx += R / N) {
-          for (double dy = -R; dy < R; dy += R / N) {
-            Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
-            debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
-            for (Building building : world.getBuildings()) {
-              if (isEnemy(building)) {
-                if (distance < building.getVisionRange()) {}
+        if (debug != null) {
+          int N = 5;
+          double R = self.getCastRange() * 2 / 3;
+          for (double dx = -R; dx < R; dx += R / N) {
+            for (double dy = -R; dy < R; dy += R / N) {
+              Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
+              debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
+              for (Building building : world.getBuildings()) {
+                if (isEnemy(building)) {
+                  if (distance < building.getVisionRange()) {}
+                }
               }
             }
           }
@@ -211,9 +213,9 @@ public final class MyStrategy implements Strategy {
             self.getY() + 20,
             " " + self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()],
             Color.black);
-      }
 
-      debug.drawBeforeScene();
+        debug.drawBeforeScene();
+      }
     }
 
     private Tree getClosestTree(Wizard self, World world) {
@@ -330,7 +332,7 @@ public final class MyStrategy implements Strategy {
             new Point2D(100.0D, mapSize - 100.0D),
             new Point2D(200.0D, mapSize - 600.0D),
             new Point2D(800.0D, mapSize - 800.0D),
-            new Point2D(mapSize - 600.0D, 600.0D)
+            new Point2D(mapSize - 600.0D, 400.0D)
           });
 
       waypointsByLane.put(
