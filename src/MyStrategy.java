@@ -82,6 +82,7 @@ public final class MyStrategy implements Strategy {
 
   private static class Brain {
 
+    private static final int IDLE_TICKS = 125;
     private final Faction ALLY_FRACTION;
     private final Faction ENEMY_FRACTION;
 
@@ -136,15 +137,19 @@ public final class MyStrategy implements Strategy {
       walker.update(self, world, game);
       shooter.update(self, world, game);
 
-      boolean lowHP = self.getLife() < 40;
+      if (world.getTickIndex() < IDLE_TICKS) {
+        move.setTurn(2 * Math.PI / IDLE_TICKS);
+        return;
+      }
 
-      Point2D walkingTarget = lowHP ? field.getPreviousWaypoint() : field.getNextWaypoint();
+      boolean lowHP = self.getLife() < 40;
+      Point2D walkingTarget = field.getNextWaypoint();
       LivingUnit shootingTarget = shooter.getTarget();
 
       /*
       Tree tree = getClosestTree(self, world);
       if (tree != null) {
-        walker.turnTo(new Point2D(tree), move);
+        walker.turnTo(tree, move);
         debug.fillCircle(tree.getX(), tree.getY(), 5, Color.red);
         debug.drawAfterScene();
         double distance = self.getDistanceTo(tree);
@@ -160,7 +165,6 @@ public final class MyStrategy implements Strategy {
       }
       */
       if (shootingTarget != null) {
-        walker.turnTo(new Point2D(shootingTarget), move);
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
           double angle = self.getAngleTo(shootingTarget);
@@ -189,9 +193,17 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      if (shootingTarget == null || lowHP) {
-        walker.goTo(walkingTarget, move);
+      if (lowHP == false && shootingTarget == null) {
         walker.turnTo(walkingTarget, move);
+        walker.goTo(walkingTarget, move);
+      } else if (lowHP == false && shootingTarget != null) {
+        walker.turnTo(shootingTarget, move);
+      } else if (lowHP == true && shootingTarget == null) {
+        walker.turnTo(walkingTarget, move);
+        walker.goTo(field.getPreviousWaypoint(), move);
+      } else if (lowHP == true && shootingTarget != null) {
+        walker.turnTo(shootingTarget, move);
+        walker.goTo(field.getPreviousWaypoint(), move);
       }
 
       if (debug != null) {
@@ -783,6 +795,10 @@ public final class MyStrategy implements Strategy {
     public void turnTo(Point2D point, Move move) {
       double angle = self.getAngleTo(point.getX(), point.getY());
       move.setTurn(angle);
+    }
+
+    public void turnTo(Unit unit, Move move) {
+      turnTo(new Point2D(unit), move);
     }
   }
 
