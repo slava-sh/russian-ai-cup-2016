@@ -144,7 +144,8 @@ public final class MyStrategy implements Strategy {
       }
 
       boolean lowHP = self.getLife() < 40;
-      Point2D walkingTarget = field.getNextWaypoint();
+      Point2D bonus = field.getBonus();
+      Point2D walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
       LivingUnit shootingTarget = shooter.getTarget();
 
       if (shootingTarget != null) {
@@ -165,7 +166,9 @@ public final class MyStrategy implements Strategy {
         walker.goTo(walkingTarget, move);
       } else if (lowHP == false && shootingTarget != null) {
         walker.turnTo(shootingTarget, move);
-        if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
+        if (bonus != null) {
+          walker.goTo(walkingTarget, move);
+        } else if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
           walker.goTo(shootingTarget, move);
         }
       } else if (lowHP == true && shootingTarget == null) {
@@ -217,11 +220,7 @@ public final class MyStrategy implements Strategy {
             Color.black);
 
         for (LivingUnit unit : field.getAllObstacles()) {
-          debug.showText(
-              unit.getX(),
-              unit.getY(),
-              "HP:" + unit.getLife(),
-              Color.black);
+          debug.showText(unit.getX(), unit.getY(), "HP:" + unit.getLife(), Color.black);
         }
 
         debug.drawBeforeScene();
@@ -327,8 +326,9 @@ public final class MyStrategy implements Strategy {
 
     private final double HEXAGON_SIZE;
     private final Map<LaneType, Point2D[]> waypointsByLane = new EnumMap<>(LaneType.class);
-
+    Point2D oldPosition;
     private Map<HexPoint, FieldPoint> hexToPoint;
+    private Point2D bonus = null;
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
@@ -342,6 +342,7 @@ public final class MyStrategy implements Strategy {
             new Point2D(100.0D, mapSize - 100.0D),
             new Point2D(200.0D, mapSize - 600.0D),
             new Point2D(800.0D, mapSize - 800.0D),
+            new Point2D(mapSize * 0.5, mapSize * 0.5),
             new Point2D(mapSize - 550.0D, 400.0D)
           });
 
@@ -380,6 +381,41 @@ public final class MyStrategy implements Strategy {
 
     @Override
     public void update() {
+      if (world.getTickIndex() % 100 == 0) {
+        if (oldPosition != null
+            && bonus != null
+            && oldPosition.getDistanceTo(self) < self.getRadius() * 2) {
+          bonus = null;
+          if (debug != null) {
+            System.out.println("stuck chasing a bonus");
+          }
+        }
+        oldPosition = new Point2D(self);
+      }
+
+      if (world.getTickIndex() != 0
+          && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
+        Point2D b1 = new Point2D(game.getMapSize() * 0.3, game.getMapSize() * 0.3);
+        Point2D b2 = new Point2D(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
+        bonus = b1.getDistanceTo(self) < b2.getDistanceTo(self) ? b1 : b2;
+        if (debug != null) {
+          System.out.println("bonus at " + bonus);
+        }
+      }
+
+      if (bonus != null && bonus.getDistanceTo(self) < self.getVisionRange()) {
+        boolean bonusExists =
+            Arrays.asList(world.getBonuses())
+                .stream()
+                .anyMatch(b -> b.getDistanceTo(self) < self.getVisionRange());
+        if (!bonusExists) {
+          if (debug != null) {
+            System.out.println("bonus disappeared");
+          }
+          bonus = null;
+        }
+      }
+
       if (debug != null) {
         for (Point2D[] waypoints : waypointsByLane.values()) {
           for (int i = 0; i < waypoints.length; ++i) {
@@ -397,7 +433,11 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private Point2D getNextWaypoint() {
+    public Point2D getBonus() {
+      return bonus;
+    }
+
+    public Point2D getNextWaypoint() {
       Point2D[] waypoints = waypointsByLane.get(LaneType.MIDDLE);
       int lastWaypointIndex = waypoints.length - 1;
       Point2D lastWaypoint = waypoints[lastWaypointIndex];
@@ -417,7 +457,7 @@ public final class MyStrategy implements Strategy {
       return lastWaypoint;
     }
 
-    private Point2D getPreviousWaypoint() {
+    public Point2D getPreviousWaypoint() {
       Point2D[] waypoints = waypointsByLane.get(LaneType.MIDDLE);
       Point2D firstWaypoint = waypoints[0];
 
