@@ -344,7 +344,7 @@ public final class MyStrategy implements Strategy {
             new Point2D(100.0D, mapSize - 100.0D),
             new Point2D(200.0D, mapSize - 600.0D),
             new Point2D(800.0D, mapSize - 800.0D),
-            new Point2D(mapSize - 600.0D, 400.0D)
+            new Point2D(mapSize - 550.0D, 400.0D)
           });
 
       waypointsByLane.put(
