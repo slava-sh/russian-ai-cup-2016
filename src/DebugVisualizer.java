@@ -51,6 +51,12 @@ public class DebugVisualizer implements MyStrategy.Visualizer {
     sendCommand("end post");
   }
 
+  public void drawAbsolute() {
+    sendCommand("begin abs");
+    sendQueuedCommands();
+    sendCommand("end abs");
+  }
+
   public void drawCircle(double x, double y, double r, Color color) {
     Formatter f = new Formatter();
     queueCommand(
@@ -73,6 +79,40 @@ public class DebugVisualizer implements MyStrategy.Visualizer {
                 x,
                 y,
                 r,
+                (float) color.getRed() / 255,
+                (float) color.getGreen() / 255,
+                (float) color.getBlue() / 255)
+            .toString());
+  }
+
+  public void drawArc(
+      double x, double y, double radius, double startAngle, double arcAngle, Color color) {
+    Formatter f = new Formatter();
+    sendCommand(
+        f.format(
+                "arc %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f",
+                x,
+                y,
+                radius,
+                startAngle,
+                arcAngle,
+                (float) color.getRed() / 255,
+                (float) color.getGreen() / 255,
+                (float) color.getBlue() / 255)
+            .toString());
+  }
+
+  public void fillArc(
+      double x, double y, double radius, double startAngle, double arcAngle, Color color) {
+    Formatter f = new Formatter();
+    sendCommand(
+        f.format(
+                "fill_arc %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f %1.1f",
+                x,
+                y,
+                radius,
+                startAngle,
+                arcAngle,
                 (float) color.getRed() / 255,
                 (float) color.getGreen() / 255,
                 (float) color.getBlue() / 255)

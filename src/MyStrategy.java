@@ -43,9 +43,17 @@ public final class MyStrategy implements Strategy {
 
     void drawAfterScene();
 
+    void drawAbsolute();
+
     void drawCircle(double x, double y, double r, Color color);
 
     void fillCircle(double x, double y, double r, Color color);
+
+    void drawArc(
+        double x, double y, double radius, double startAngle, double arcAngle, Color color);
+
+    void fillArc(
+        double x, double y, double radius, double startAngle, double arcAngle, Color color);
 
     void drawRect(double x1, double y1, double x2, double y2, Color color);
 
