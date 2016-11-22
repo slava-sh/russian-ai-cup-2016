@@ -113,10 +113,21 @@ public final class MyStrategy implements Strategy {
       shooter = new Shooter(this, debug);
 
       if (debug != null) {
-        System.out.println("Staff damage: " + game.getStaffDamage());
-        System.out.println("Missile damage: " + game.getMagicMissileDirectDamage());
-        System.out.println("Staff cooldown: " + game.getStaffCooldownTicks());
-        System.out.println("Missile cooldown: " + game.getMagicMissileCooldownTicks());
+        System.out.println("StaffDamage = " + game.getStaffDamage());
+        System.out.println("MagicMissileDirectDamage = " + game.getMagicMissileDirectDamage());
+        System.out.println("StaffCooldownTicks = " + game.getStaffCooldownTicks());
+        System.out.println("MagicMissileCooldownTicks = " + game.getMagicMissileCooldownTicks());
+        System.out.println("BuildingDamageScoreFactor = " + game.getBuildingDamageScoreFactor());
+        System.out.println(
+            "BuildingEliminationScoreFactor = " + game.getBuildingEliminationScoreFactor());
+        System.out.println("MinionDamageScoreFactor = " + game.getMinionDamageScoreFactor());
+        System.out.println(
+            "MinionEliminationScoreFactor = " + game.getMinionEliminationScoreFactor());
+        System.out.println("TeamWorkingScoreFactor = " + game.getTeamWorkingScoreFactor());
+        System.out.println("WizardDamageScoreFactor = " + game.getWizardDamageScoreFactor());
+        System.out.println(
+            "WizardEliminationScoreFactor = " + game.getWizardEliminationScoreFactor());
+        System.out.println("MaxLife = " + self.getMaxLife());
       }
     }
 
@@ -125,33 +136,30 @@ public final class MyStrategy implements Strategy {
       walker.update(self, world, game);
       shooter.update(self, world, game);
 
-      Point2D walkingTarget = field.getNextWaypoint();
+      boolean lowHP = self.getLife() < 40;
+
+      Point2D walkingTarget = lowHP ? field.getPreviousWaypoint() : field.getNextWaypoint();
       LivingUnit shootingTarget = shooter.getTarget();
 
-      walker.goTo(walkingTarget, move);
-
-      if (shootingTarget == null) {
-        walker.turnTo(walkingTarget, move);
-
-        /*
-        Tree tree = getClosestTree(self, world);
-        if (tree != null) {
-          walker.turnTo(new Point2D(tree), move);
-          debug.fillCircle(tree.getX(), tree.getY(), 5, Color.red);
-          debug.drawAfterScene();
-          double distance = self.getDistanceTo(tree);
-          double angle = self.getAngleTo(tree);
-          if (distance <= game.getStaffRange()) {
-            move.setAction(ActionType.STAFF);
-          } else if (distance <= self.getCastRange()
-              && Math.abs(angle) <= game.getStaffSector() / 2) {
-            move.setAction(ActionType.MAGIC_MISSILE);
-            move.setCastAngle(angle);
-            move.setMinCastDistance(distance - tree.getRadius() + game.getMagicMissileRadius());
-          }
+      /*
+      Tree tree = getClosestTree(self, world);
+      if (tree != null) {
+        walker.turnTo(new Point2D(tree), move);
+        debug.fillCircle(tree.getX(), tree.getY(), 5, Color.red);
+        debug.drawAfterScene();
+        double distance = self.getDistanceTo(tree);
+        double angle = self.getAngleTo(tree);
+        if (distance <= game.getStaffRange()) {
+          move.setAction(ActionType.STAFF);
+        } else if (distance <= self.getCastRange()
+            && Math.abs(angle) <= game.getStaffSector() / 2) {
+          move.setAction(ActionType.MAGIC_MISSILE);
+          move.setCastAngle(angle);
+          move.setMinCastDistance(distance - tree.getRadius() + game.getMagicMissileRadius());
         }
-        */
-      } else {
+      }
+      */
+      if (shootingTarget != null) {
         walker.turnTo(new Point2D(shootingTarget), move);
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
@@ -163,6 +171,46 @@ public final class MyStrategy implements Strategy {
                 distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
           }
         }
+
+        int N = 5;
+        double R = self.getCastRange() * 2 / 3;
+        for (double dx = -R; dx < R; dx += R / N) {
+          for (double dy = -R; dy < R; dy += R / N) {
+            Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
+            debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
+            for (Building building : world.getBuildings()) {
+              if (isEnemy(building)) {
+                if (distance < building.getVisionRange()) {}
+              }
+            }
+          }
+        }
+      }
+
+      if (shootingTarget == null || lowHP) {
+        walker.goTo(walkingTarget, move);
+        walker.turnTo(walkingTarget, move);
+      }
+
+      if (debug != null) {
+        for (Building building : world.getBuildings()) {
+          debug.drawCircle(
+              building.getX(), building.getY(), building.getVisionRange(), Color.lightGray);
+          debug.drawCircle(building.getX(), building.getY(), building.getAttackRange(), Color.pink);
+          debug.showText(
+              building.getX(),
+              building.getY(),
+              " " + building.getRemainingActionCooldownTicks(),
+              Color.black);
+        }
+
+        debug.showText(
+            self.getX(), self.getY(), " " + self.getRemainingActionCooldownTicks(), Color.black);
+        debug.showText(
+            self.getX(),
+            self.getY() + 20,
+            " " + self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()],
+            Color.black);
       }
 
       debug.drawBeforeScene();
@@ -345,7 +393,7 @@ public final class MyStrategy implements Strategy {
       for (int waypointIndex = 0; waypointIndex < lastWaypointIndex; ++waypointIndex) {
         Point2D waypoint = waypoints[waypointIndex];
 
-        if (waypoint.getDistanceTo(self) <= self.getRadius()) {
+        if (waypoint.getDistanceTo(self) <= self.getRadius() * 2) {
           return waypoints[waypointIndex + 1];
         }
 
@@ -355,6 +403,25 @@ public final class MyStrategy implements Strategy {
       }
 
       return lastWaypoint;
+    }
+
+    private Point2D getPreviousWaypoint() {
+      Point2D[] waypoints = waypointsByLane.get(LaneType.MIDDLE);
+      Point2D firstWaypoint = waypoints[0];
+
+      for (int waypointIndex = waypoints.length - 1; waypointIndex > 0; --waypointIndex) {
+        Point2D waypoint = waypoints[waypointIndex];
+
+        if (waypoint.getDistanceTo(self) <= self.getRadius() * 2) {
+          return waypoints[waypointIndex - 1];
+        }
+
+        if (firstWaypoint.getDistanceTo(waypoint) < firstWaypoint.getDistanceTo(self)) {
+          return waypoint;
+        }
+      }
+
+      return firstWaypoint;
     }
 
     public void oldUpdate() {
