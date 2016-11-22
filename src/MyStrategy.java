@@ -146,24 +146,6 @@ public final class MyStrategy implements Strategy {
       Point2D walkingTarget = field.getNextWaypoint();
       LivingUnit shootingTarget = shooter.getTarget();
 
-      /*
-      Tree tree = getClosestTree(self, world);
-      if (tree != null) {
-        walker.turnTo(tree, move);
-        debug.fillCircle(tree.getX(), tree.getY(), 5, Color.red);
-        debug.drawAfterScene();
-        double distance = self.getDistanceTo(tree);
-        double angle = self.getAngleTo(tree);
-        if (distance <= game.getStaffRange()) {
-          move.setAction(ActionType.STAFF);
-        } else if (distance <= self.getCastRange()
-            && Math.abs(angle) <= game.getStaffSector() / 2) {
-          move.setAction(ActionType.MAGIC_MISSILE);
-          move.setCastAngle(angle);
-          move.setMinCastDistance(distance - tree.getRadius() + game.getMagicMissileRadius());
-        }
-      }
-      */
       if (shootingTarget != null) {
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
@@ -175,22 +157,6 @@ public final class MyStrategy implements Strategy {
                 distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
           }
         }
-
-        if (debug != null) {
-          int N = 5;
-          double R = self.getCastRange() * 2 / 3;
-          for (double dx = -R; dx < R; dx += R / N) {
-            for (double dy = -R; dy < R; dy += R / N) {
-              Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
-              debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
-              for (Building building : world.getBuildings()) {
-                if (isEnemy(building)) {
-                  if (distance < building.getVisionRange()) {}
-                }
-              }
-            }
-          }
-        }
       }
 
       if (lowHP == false && shootingTarget == null) {
@@ -198,6 +164,9 @@ public final class MyStrategy implements Strategy {
         walker.goTo(walkingTarget, move);
       } else if (lowHP == false && shootingTarget != null) {
         walker.turnTo(shootingTarget, move);
+        if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
+          walker.goTo(shootingTarget, move);
+        }
       } else if (lowHP == true && shootingTarget == null) {
         walker.turnTo(walkingTarget, move);
         walker.goTo(field.getPreviousWaypoint(), move);
@@ -207,6 +176,27 @@ public final class MyStrategy implements Strategy {
       }
 
       if (debug != null) {
+        int N = 5;
+        double R = self.getCastRange() * 2 / 3;
+        for (double dx = -R; dx < R; dx += R / N) {
+          for (double dy = -R; dy < R; dy += R / N) {
+            Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
+            debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
+            for (Building building : world.getBuildings()) {
+              if (isEnemy(building)) {
+              }
+            }
+          }
+        }
+
+        if (walkingTarget != null) {
+          debug.fillCircle(walkingTarget.getX(), walkingTarget.getY(), 5, Color.blue);
+        }
+
+        if (shootingTarget != null) {
+          debug.fillCircle(shootingTarget.getX(), shootingTarget.getY(), 5, Color.red);
+        }
+
         for (Building building : world.getBuildings()) {
           debug.drawCircle(
               building.getX(), building.getY(), building.getVisionRange(), Color.lightGray);
@@ -797,6 +787,10 @@ public final class MyStrategy implements Strategy {
       move.setTurn(angle);
     }
 
+    public void goTo(Unit unit, Move move) {
+      goTo(new Point2D(unit), move);
+    }
+
     public void turnTo(Unit unit, Move move) {
       turnTo(new Point2D(unit), move);
     }
@@ -844,22 +838,17 @@ public final class MyStrategy implements Strategy {
 
     private LivingUnit getTargetHomo(LivingUnit[] units) {
       LivingUnit bestTarget = null;
-
       for (LivingUnit target : units) {
         if (!brain.isEnemy(target)) {
           continue;
         }
-
-        double distance = self.getDistanceTo(target);
-        if (distance > self.getCastRange()) {
+        if (self.getDistanceTo(target) > self.getVisionRange()) {
           continue;
         }
-
         if (bestTarget == null || target.getLife() < bestTarget.getLife()) {
           bestTarget = target;
         }
       }
-
       return bestTarget;
     }
   }
