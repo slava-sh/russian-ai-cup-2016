@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import model.ActionType;
 import model.Building;
@@ -183,8 +184,7 @@ public final class MyStrategy implements Strategy {
             Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
             debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
             for (Building building : world.getBuildings()) {
-              if (isEnemy(building)) {
-              }
+              if (isEnemy(building)) {}
             }
           }
         }
@@ -215,6 +215,14 @@ public final class MyStrategy implements Strategy {
             self.getY() + 20,
             " " + self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()],
             Color.black);
+
+        //for (LivingUnit unit : field.getAllObstacles()) {
+        //  debug.drawCircle(
+        //      unit.getX(),
+        //      unit.getY(),
+        //      unit.getRadius() + self.getRadius(),
+        //      Color.yellow.brighter().brighter().brighter());
+        //}
 
         debug.drawBeforeScene();
       }
@@ -660,6 +668,19 @@ public final class MyStrategy implements Strategy {
 
       return Collections.unmodifiableMap(map);
     }
+
+    List<LivingUnit> getAllObstacles() {
+      List<LivingUnit> units = new ArrayList<>();
+      units.addAll(
+          Arrays.asList(world.getWizards())
+              .stream()
+              .filter(w -> !w.isMe())
+              .collect(Collectors.toList()));
+      units.addAll(Arrays.asList(world.getMinions()));
+      units.addAll(Arrays.asList(world.getBuildings()));
+      units.addAll(Arrays.asList(world.getTrees()));
+      return units;
+    }
   }
 
   private static class Walker extends BrainPart {
@@ -704,39 +725,70 @@ public final class MyStrategy implements Strategy {
       // Speed.
       Point2D v = direction.mul(k);
 
+      // Try avoiding collisions.
+      final int T = 8; // Look-ahead ticks.
+      final int N = 4 * 3; // Angles to consider.
+
+      if (debug != null) {
+        for (int i = 1; i <= N * 2; ++i) {
+          int j = i / 2;
+          int sign = i % 1 == 0 ? 1 : -1;
+          Point2D newV = v.rotate(sign * Math.PI * 2 * j / N);
+          debug.drawCircle(
+              self.getX() + T * newV.getX(), self.getY() + T * newV.getY(), 3, Color.orange);
+        }
+        debug.fillCircle(self.getX() + T * v.getX(), self.getY() + T * v.getY(), 4, Color.cyan);
+      }
+
+      List<LivingUnit> obstacles = brain.field.getAllObstacles();
+      for (int i = 1; i <= N * 2; ++i) {
+        int j = i / 2;
+        int sign = i % 1 == 0 ? 1 : -1;
+        Point2D newV = v.rotate(sign * Math.PI * 2 * j / N);
+        Point2D newSelf = newV.mul(T).add(new Point2D(self));
+        boolean noCollisions =
+            obstacles
+                .stream()
+                .allMatch(u -> newSelf.getDistanceTo(u) > u.getRadius() + self.getRadius());
+        if (noCollisions) {
+          v = newV;
+          break;
+        }
+      }
+
       move.setSpeed(aSign * v.project(a));
       move.setStrafeSpeed(bSign * v.project(b));
 
       if (debug != null) {
-        double t = 30;
+        debug.fillCircle(self.getX() + T * v.getX(), self.getY() + T * v.getY(), 5, Color.orange);
 
         boolean DISPLAY_BOX = false;
         if (DISPLAY_BOX) {
           List<Point2D> box = new ArrayList<>();
           box.add(
               new Point2D(
-                  self.getX() + t * game.getWizardForwardSpeed() * Math.cos(self.getAngle()),
-                  self.getY() + t * game.getWizardForwardSpeed() * Math.sin(self.getAngle())));
+                  self.getX() + T * game.getWizardForwardSpeed() * Math.cos(self.getAngle()),
+                  self.getY() + T * game.getWizardForwardSpeed() * Math.sin(self.getAngle())));
           box.add(
               new Point2D(
                   self.getX()
-                      + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
+                      + T * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
                   self.getY()
-                      + t * game.getWizardStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2)));
+                      + T * game.getWizardStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2)));
           box.add(
               new Point2D(
                   self.getX()
-                      + t * game.getWizardBackwardSpeed() * Math.cos(self.getAngle() + Math.PI),
+                      + T * game.getWizardBackwardSpeed() * Math.cos(self.getAngle() + Math.PI),
                   self.getY()
-                      + t * game.getWizardBackwardSpeed() * Math.sin(self.getAngle() + Math.PI)));
+                      + T * game.getWizardBackwardSpeed() * Math.sin(self.getAngle() + Math.PI)));
           box.add(
               new Point2D(
                   self.getX()
-                      + t
+                      + T
                           * game.getWizardStrafeSpeed()
                           * Math.cos(self.getAngle() + Math.PI * 3 / 2),
                   self.getY()
-                      + t
+                      + T
                           * game.getWizardStrafeSpeed()
                           * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
           for (int i = 0; i < box.size(); ++i) {
@@ -754,31 +806,30 @@ public final class MyStrategy implements Strategy {
         //debug.drawLine(
         //    self.getX(),
         //    self.getY(),
-        //    self.getX() + t * a.getX(),
-        //    self.getY() + t * a.getY(),
+        //    self.getX() + T * a.getX(),
+        //    self.getY() + T * a.getY(),
         //    Color.magenta);
         //debug.drawLine(
         //    self.getX(),
         //    self.getY(),
-        //    self.getX() + t * b.getX(),
-        //    self.getY() + t * b.getY(),
+        //    self.getX() + T * b.getX(),
+        //    self.getY() + T * b.getY(),
         //    Color.cyan);
         //debug.drawLine(
         //    self.getX(),
         //    self.getY(),
-        //    self.getX() + t * v.getX(),
-        //    self.getY() + t * v.getY(),
+        //    self.getX() + T * v.getX(),
+        //    self.getY() + T * v.getY(),
         //    Color.red);
         //debug.fillCircle(
         //    self.getX()
-        //        + t * move.getSpeed() * Math.cos(self.getAngle())
-        //        + t * move.getStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
+        //        + T * move.getSpeed() * Math.cos(self.getAngle())
+        //        + T * move.getStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
         //    self.getY()
-        //        + t * move.getSpeed() * Math.sin(self.getAngle())
-        //        + t * move.getStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2),
+        //        + T * move.getSpeed() * Math.sin(self.getAngle())
+        //        + T * move.getStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2),
         //    5,
         //    Color.orange);
-        debug.fillCircle(self.getX() + t * v.getX(), self.getY() + t * v.getY(), 5, Color.red);
       }
     }
 
@@ -930,6 +981,12 @@ public final class MyStrategy implements Strategy {
 
     public double project(Point2D other) {
       return this.dot(other.unit());
+    }
+
+    public Point2D rotate(double angle) {
+      double sin = Math.sin(angle);
+      double cos = Math.cos(angle);
+      return new Point2D(x * cos - y * sin, y * cos + x * sin);
     }
   }
 
