@@ -216,13 +216,13 @@ public final class MyStrategy implements Strategy {
             " " + self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()],
             Color.black);
 
-        //for (LivingUnit unit : field.getAllObstacles()) {
-        //  debug.drawCircle(
-        //      unit.getX(),
-        //      unit.getY(),
-        //      unit.getRadius() + self.getRadius(),
-        //      Color.yellow.brighter().brighter().brighter());
-        //}
+        for (LivingUnit unit : field.getAllObstacles()) {
+          debug.showText(
+              unit.getX(),
+              unit.getY(),
+              "HP:" + unit.getLife(),
+              Color.black);
+        }
 
         debug.drawBeforeScene();
       }
