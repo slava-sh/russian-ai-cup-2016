@@ -132,6 +132,25 @@ public final class MyStrategy implements Strategy {
 
       if (shootingTarget == null) {
         walker.turnTo(walkingTarget, move);
+
+        /*
+        Tree tree = getClosestTree(self, world);
+        if (tree != null) {
+          walker.turnTo(new Point2D(tree), move);
+          debug.fillCircle(tree.getX(), tree.getY(), 5, Color.red);
+          debug.drawAfterScene();
+          double distance = self.getDistanceTo(tree);
+          double angle = self.getAngleTo(tree);
+          if (distance <= game.getStaffRange()) {
+            move.setAction(ActionType.STAFF);
+          } else if (distance <= self.getCastRange()
+              && Math.abs(angle) <= game.getStaffSector() / 2) {
+            move.setAction(ActionType.MAGIC_MISSILE);
+            move.setCastAngle(angle);
+            move.setMinCastDistance(distance - tree.getRadius() + game.getMagicMissileRadius());
+          }
+        }
+        */
       } else {
         walker.turnTo(new Point2D(shootingTarget), move);
         double distance = self.getDistanceTo(shootingTarget);
@@ -147,6 +166,19 @@ public final class MyStrategy implements Strategy {
       }
 
       debug.drawBeforeScene();
+    }
+
+    private Tree getClosestTree(Wizard self, World world) {
+      Tree closestTree = null;
+      double closestTreeDistance = 0;
+      for (Tree tree : world.getTrees()) {
+        double distance = self.getDistanceTo(tree);
+        if (closestTree == null || distance < closestTreeDistance) {
+          closestTree = tree;
+          closestTreeDistance = distance;
+        }
+      }
+      return closestTree;
     }
 
     boolean isEnemy(Unit unit) {
@@ -629,11 +661,13 @@ public final class MyStrategy implements Strategy {
           box.add(
               new Point2D(
                   self.getX()
-                      + t * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI * 3 / 2),
+                      + t
+                          * game.getWizardStrafeSpeed()
+                          * Math.cos(self.getAngle() + Math.PI * 3 / 2),
                   self.getY()
                       + t
-                      * game.getWizardStrafeSpeed()
-                      * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
+                          * game.getWizardStrafeSpeed()
+                          * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
           for (int i = 0; i < box.size(); ++i) {
             int j = (i + 1) % box.size();
             // debug.fillCircle(box.get(i).getX(), box.get(i).getY(), 5, Color.blue);
