@@ -540,9 +540,8 @@ public final class MyStrategy implements Strategy {
 
     private final double HEXAGON_SIZE;
     private final Map<LaneType, Point2D[]> waypointsByLane = new EnumMap<>(LaneType.class);
-    Point2D oldPosition;
     private Map<HexPoint, FieldPoint> hexToPoint;
-    private Point2D bonus = null;
+    private List<Point2D> bonuses = new ArrayList<>();
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
@@ -602,42 +601,21 @@ public final class MyStrategy implements Strategy {
     public void update() {
       if (world.getTickIndex() != 0
           && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
-        Point2D b1 = new Point2D(game.getMapSize() * 0.3, game.getMapSize() * 0.3);
-        Point2D b2 = new Point2D(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
-        bonus = b1.getDistanceTo(self) < b2.getDistanceTo(self) ? b1 : b2;
-        oldPosition = null;
-        if (debug != null) {
-          System.out.println("bonus at " + bonus);
-        }
+        bonuses.clear();
+        bonuses.add(new Point2D(game.getMapSize() * 0.3, game.getMapSize() * 0.3));
+        bonuses.add(new Point2D(game.getMapSize() * 0.7, game.getMapSize() * 0.7));
       }
 
-      if (world.getTickIndex() % 200 == 0) {
-        if (oldPosition != null
-            && bonus != null
-            && oldPosition.getDistanceTo(self) < self.getRadius()) {
-          if (debug != null) {
-            System.out.println("stuck chasing a bonus");
-          }
-          bonus = null;
-        }
-        oldPosition = new Point2D(self);
-      }
-      if (debug != null && oldPosition != null) {
-        debug.drawCircle(oldPosition.getX(), oldPosition.getY(), self.getRadius(), Color.gray);
-        debug.drawBeforeScene();
-      }
-
-      if (bonus != null && bonus.getDistanceTo(self) < self.getVisionRange()) {
-        boolean bonusExists =
-            Arrays.stream(world.getBonuses())
-                .anyMatch(b -> b.getDistanceTo(self) < self.getVisionRange());
-        if (!bonusExists) {
-          if (debug != null) {
-            System.out.println("bonus disappeared");
-          }
-          bonus = null;
-        }
-      }
+      bonuses.removeIf(
+          bonus -> {
+            if (bonus.getDistanceTo(self) > self.getVisionRange()) {
+              return false;
+            }
+            boolean exists =
+                Arrays.stream(world.getBonuses())
+                    .anyMatch(b -> b.getDistanceTo(self) < self.getVisionRange());
+            return !exists;
+          });
 
       if (debug != null) {
         for (Point2D[] waypoints : waypointsByLane.values()) {
@@ -658,7 +636,15 @@ public final class MyStrategy implements Strategy {
     }
 
     public Point2D getBonus() {
-      return bonus;
+      if (bonuses.isEmpty()) {
+        return null;
+      }
+      Point2D b1 = bonuses.get(0);
+      if (bonuses.size() == 1) {
+        return b1;
+      }
+      Point2D b2 = bonuses.get(1);
+      return b1.getDistanceTo(self) < b2.getDistanceTo(self) ? b1 : b2;
     }
 
     public Point2D getNextWaypoint() {
