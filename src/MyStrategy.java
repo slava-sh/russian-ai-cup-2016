@@ -498,7 +498,9 @@ public final class MyStrategy implements Strategy {
           LaneType.MIDDLE,
           new Point2D[] {
             new Point2D(100.0D, mapSize - 100.0D),
-            new Point2D(200.0D, mapSize - 600.0D),
+            self.getId() == 1 || self.getId() == 2 || self.getId() == 6 || self.getId() == 7
+                ? new Point2D(200.0D, mapSize - 600.0D)
+                : new Point2D(600.0D, mapSize - 200.0D),
             new Point2D(800.0D, mapSize - 800.0D),
             new Point2D(mapSize * 0.45, mapSize * 0.55),
             new Point2D(mapSize - 550.0D, 400.0D)
