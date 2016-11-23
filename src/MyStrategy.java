@@ -572,6 +572,17 @@ public final class MyStrategy implements Strategy {
 
     @Override
     public void update() {
+      if (world.getTickIndex() != 0
+          && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
+        Point2D b1 = new Point2D(game.getMapSize() * 0.3, game.getMapSize() * 0.3);
+        Point2D b2 = new Point2D(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
+        bonus = b1.getDistanceTo(self) < b2.getDistanceTo(self) ? b1 : b2;
+        oldPosition = null;
+        if (debug != null) {
+          System.out.println("bonus at " + bonus);
+        }
+      }
+
       if (world.getTickIndex() % 100 == 0) {
         if (oldPosition != null
             && bonus != null
@@ -579,18 +590,12 @@ public final class MyStrategy implements Strategy {
           if (debug != null) {
             System.out.println("stuck chasing a bonus");
           }
+          bonus = null;
         }
         oldPosition = new Point2D(self);
       }
-
-      if (world.getTickIndex() != 0
-          && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
-        Point2D b1 = new Point2D(game.getMapSize() * 0.3, game.getMapSize() * 0.3);
-        Point2D b2 = new Point2D(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
-        bonus = b1.getDistanceTo(self) < b2.getDistanceTo(self) ? b1 : b2;
-        if (debug != null) {
-          System.out.println("bonus at " + bonus);
-        }
+      if (debug != null) {
+        debug.drawCircle(oldPosition.getX(), oldPosition.getY(), self.getRadius(), Color.gray);
       }
 
       if (bonus != null && bonus.getDistanceTo(self) < self.getVisionRange()) {
