@@ -57,6 +57,9 @@ public final class MyStrategy implements Strategy {
   }
 
   public interface Visualizer {
+
+    void sync();
+
     void drawBeforeScene();
 
     void drawAfterScene();
@@ -294,6 +297,7 @@ public final class MyStrategy implements Strategy {
                   .anyMatch(m -> endangeredBy.test(m, getMinionAttackRange(m)));
       if (inDanger && debug != null) {
         debug.drawCircle(self.getX(), self.getY(), self.getRadius() / 2, Color.red);
+        debug.drawBeforeScene();
       }
 
       Point2D bonus = field.getBonus();
@@ -309,6 +313,7 @@ public final class MyStrategy implements Strategy {
         debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
         debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
         debug.drawCircle(center.getX(), center.getY(), BONUS_CHASE_RADIUS, Color.lightGray);
+        debug.drawBeforeScene();
       }
       if (bonus != null
           && center.getDistanceTo(self) > BONUS_CHASE_RADIUS
@@ -317,6 +322,7 @@ public final class MyStrategy implements Strategy {
       }
       if (debug != null && bonus != null) {
         debug.fillCircle(self.getX(), self.getY(), 10, Color.green);
+        debug.drawAfterScene();
       }
 
       Point2D walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
@@ -378,6 +384,7 @@ public final class MyStrategy implements Strategy {
               }
             }
           }
+          debug.drawBeforeScene();
         }
 
         if (walkingTarget != null) {
@@ -414,6 +421,8 @@ public final class MyStrategy implements Strategy {
         }
 
         debug.drawBeforeScene();
+
+        debug.sync();
       }
     }
 
@@ -618,6 +627,7 @@ public final class MyStrategy implements Strategy {
       }
       if (debug != null && oldPosition != null) {
         debug.drawCircle(oldPosition.getX(), oldPosition.getY(), self.getRadius(), Color.gray);
+        debug.drawBeforeScene();
       }
 
       if (bonus != null && bonus.getDistanceTo(self) < self.getVisionRange()) {
@@ -646,6 +656,7 @@ public final class MyStrategy implements Strategy {
             }
           }
         }
+        debug.drawBeforeScene();
       }
     }
 
@@ -734,6 +745,7 @@ public final class MyStrategy implements Strategy {
             if (debug != null) {
               debug.drawLine(
                   neighbor.getX(), neighbor.getY(), point.getX(), point.getY(), Color.lightGray);
+              debug.drawBeforeScene();
             }
           }
         }
@@ -997,6 +1009,7 @@ public final class MyStrategy implements Strategy {
               self.getX() + T * newV.getX(), self.getY() + T * newV.getY(), 3, Color.orange);
         }
         debug.fillCircle(self.getX() + T * v.getX(), self.getY() + T * v.getY(), 4, Color.cyan);
+        debug.drawAfterScene();
       }
 
       List<LivingUnit> obstacles = brain.field.getAllObstacles();
@@ -1089,6 +1102,7 @@ public final class MyStrategy implements Strategy {
         //        + T * move.getStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2),
         //    5,
         //    Color.orange);
+        debug.drawAfterScene();
       }
     }
 
@@ -1131,6 +1145,7 @@ public final class MyStrategy implements Strategy {
             self.getAngle() - game.getStaffSector() / 2,
             game.getStaffSector(),
             Color.red);
+        debug.drawBeforeScene();
       }
     }
 

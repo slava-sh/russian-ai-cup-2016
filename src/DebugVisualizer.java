@@ -14,7 +14,10 @@ public class DebugVisualizer implements MyStrategy.Visualizer {
 
   private Socket socket;
   private OutputStream outputStream;
-  private List<String> queuedCommands = new ArrayList<>();
+  private List<String> buf = new ArrayList<>();
+  private List<String> queueBeforeScene = new ArrayList<>();
+  private List<String> queueAfterScene = new ArrayList<>();
+  private List<String> queueAbsolute = new ArrayList<>();
 
   public DebugVisualizer() {
     this(DEFAULT_HOST, DEFAULT_PORT);
@@ -40,21 +43,18 @@ public class DebugVisualizer implements MyStrategy.Visualizer {
   }
 
   public void drawBeforeScene() {
-    sendCommand("begin pre");
-    sendQueuedCommands();
-    sendCommand("end pre");
+    queueBeforeScene.addAll(buf);
+    buf.clear();
   }
 
   public void drawAfterScene() {
-    sendCommand("begin post");
-    sendQueuedCommands();
-    sendCommand("end post");
+    queueAfterScene.addAll(buf);
+    buf.clear();
   }
 
   public void drawAbsolute() {
-    sendCommand("begin abs");
-    sendQueuedCommands();
-    sendCommand("end abs");
+    queueAbsolute.addAll(buf);
+    buf.clear();
   }
 
   public void drawCircle(double x, double y, double r, Color color) {
@@ -188,13 +188,27 @@ public class DebugVisualizer implements MyStrategy.Visualizer {
   }
 
   private void queueCommand(String command) {
-    queuedCommands.add(command);
+    buf.add(command);
   }
 
-  private void sendQueuedCommands() {
-    for (String command : queuedCommands) {
+  private void dequeueCommands(List<String> queue) {
+    for (String command : queue) {
       sendCommand(command);
     }
-    queuedCommands.clear();
+    queue.clear();
+  }
+
+  public void sync() {
+    sendCommand("begin pre");
+    dequeueCommands(queueBeforeScene);
+    sendCommand("end pre");
+
+    sendCommand("begin post");
+    dequeueCommands(queueAfterScene);
+    sendCommand("end post");
+
+    sendCommand("begin abs");
+    dequeueCommands(queueAbsolute);
+    sendCommand("end abs");
   }
 }
