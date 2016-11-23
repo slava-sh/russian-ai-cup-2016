@@ -275,7 +275,7 @@ public final class MyStrategy implements Strategy {
         return;
       }
 
-      boolean lowHP = self.getLife() < 40;
+      boolean lowHP = self.getLife() < 50;
 
       Point2D bonus = field.getBonus();
       // Restrict bonus chasing area.
