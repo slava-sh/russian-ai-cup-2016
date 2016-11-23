@@ -474,6 +474,18 @@ public final class MyStrategy implements Strategy {
             color);
       }
     }
+
+    public Minion[] getFetishes() {
+      return Arrays.stream(world.getMinions())
+          .filter(m -> m.getType() == MinionType.FETISH_BLOWDART)
+          .toArray(size -> new Minion[size]);
+    }
+
+    public Minion[] getWoodcutters() {
+      return Arrays.stream(world.getMinions())
+          .filter(m -> m.getType() == MinionType.ORC_WOODCUTTER)
+          .toArray(size -> new Minion[size]);
+    }
   }
 
   private abstract static class BrainPart {
@@ -600,8 +612,7 @@ public final class MyStrategy implements Strategy {
 
       if (bonus != null && bonus.getDistanceTo(self) < self.getVisionRange()) {
         boolean bonusExists =
-            Arrays.asList(world.getBonuses())
-                .stream()
+            Arrays.stream(world.getBonuses())
                 .anyMatch(b -> b.getDistanceTo(self) < self.getVisionRange());
         if (!bonusExists) {
           if (debug != null) {
@@ -907,10 +918,7 @@ public final class MyStrategy implements Strategy {
     List<LivingUnit> getAllObstacles() {
       List<LivingUnit> units = new ArrayList<>();
       units.addAll(
-          Arrays.asList(world.getWizards())
-              .stream()
-              .filter(w -> !w.isMe())
-              .collect(Collectors.toList()));
+          Arrays.stream(world.getWizards()).filter(w -> !w.isMe()).collect(Collectors.toList()));
       units.addAll(Arrays.asList(world.getMinions()));
       units.addAll(Arrays.asList(world.getBuildings()));
       units.addAll(Arrays.asList(world.getTrees()));
@@ -932,9 +940,7 @@ public final class MyStrategy implements Strategy {
       double angle = self.getAngleTo(target.getX(), target.getY());
 
       boolean hastened =
-          Arrays.asList(self.getStatuses())
-              .stream()
-              .anyMatch(s -> s.getType() == StatusType.HASTENED);
+          Arrays.stream(self.getStatuses()).anyMatch(s -> s.getType() == StatusType.HASTENED);
       double speedMultiplier = hastened ? 1 + game.getHastenedMovementBonusFactor() : 1;
 
       int aSign = Math.abs(angle) < Math.PI / 2 ? 1 : -1;
@@ -1122,7 +1128,12 @@ public final class MyStrategy implements Strategy {
       LivingUnit buildingTarget = getTargetHomo(world.getBuildings(), range);
       LivingUnit wizardTarget = getTargetHomo(world.getWizards(), range);
       if (buildingTarget == null && wizardTarget == null) {
-        return getTargetHomo(world.getMinions(), range);
+        LivingUnit fetishTarget = getTargetHomo(brain.getFetishes(), range);
+        if (fetishTarget != null) {
+          return fetishTarget;
+        }
+        LivingUnit woodcutterTarget = getTargetHomo(brain.getWoodcutters(), range);
+        return woodcutterTarget;
       }
       if (buildingTarget == null) {
         return wizardTarget;
