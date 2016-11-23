@@ -93,8 +93,15 @@ public final class MyStrategy implements Strategy {
     private final Field field;
     private final Walker walker;
     private final Shooter shooter;
+    protected Wizard self;
+    protected World world;
+    protected Game game;
 
     public Brain(Wizard self, World world, Game game) {
+      this.self = self;
+      this.world = world;
+      this.game = game;
+
       ALLY_FRACTION = self.getFaction();
       ENEMY_FRACTION = ALLY_FRACTION == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
 
@@ -110,31 +117,157 @@ public final class MyStrategy implements Strategy {
       }
       debug = debugVisualizer;
 
-      random = new Random(game.getRandomSeed());
       field = new Field(this, debug, self, game);
       walker = new Walker(this, debug);
       shooter = new Shooter(this, debug);
 
       if (debug != null) {
-        System.out.println("StaffDamage = " + game.getStaffDamage());
-        System.out.println("MagicMissileDirectDamage = " + game.getMagicMissileDirectDamage());
-        System.out.println("StaffCooldownTicks = " + game.getStaffCooldownTicks());
-        System.out.println("MagicMissileCooldownTicks = " + game.getMagicMissileCooldownTicks());
-        System.out.println("BuildingDamageScoreFactor = " + game.getBuildingDamageScoreFactor());
-        System.out.println(
-            "BuildingEliminationScoreFactor = " + game.getBuildingEliminationScoreFactor());
-        System.out.println("MinionDamageScoreFactor = " + game.getMinionDamageScoreFactor());
-        System.out.println(
-            "MinionEliminationScoreFactor = " + game.getMinionEliminationScoreFactor());
-        System.out.println("TeamWorkingScoreFactor = " + game.getTeamWorkingScoreFactor());
-        System.out.println("WizardDamageScoreFactor = " + game.getWizardDamageScoreFactor());
-        System.out.println(
-            "WizardEliminationScoreFactor = " + game.getWizardEliminationScoreFactor());
-        System.out.println("MaxLife = " + self.getMaxLife());
+        printGameParameters();
       }
     }
 
+    private void printGameParameters() {
+      System.out.println("RandomSeed = " + game.getRandomSeed());
+      System.out.println("TickCount = " + game.getTickCount());
+      System.out.println("MapSize = " + game.getMapSize());
+      System.out.println("isSkillsEnabled = " + game.isSkillsEnabled());
+      System.out.println("isRawMessagesEnabled = " + game.isRawMessagesEnabled());
+      System.out.println("FriendlyFireDamageFactor = " + game.getFriendlyFireDamageFactor());
+      System.out.println("BuildingDamageScoreFactor = " + game.getBuildingDamageScoreFactor());
+      System.out.println(
+          "BuildingEliminationScoreFactor = " + game.getBuildingEliminationScoreFactor());
+      System.out.println("MinionDamageScoreFactor = " + game.getMinionDamageScoreFactor());
+      System.out.println(
+          "MinionEliminationScoreFactor = " + game.getMinionEliminationScoreFactor());
+      System.out.println("WizardDamageScoreFactor = " + game.getWizardDamageScoreFactor());
+      System.out.println(
+          "WizardEliminationScoreFactor = " + game.getWizardEliminationScoreFactor());
+      System.out.println("TeamWorkingScoreFactor = " + game.getTeamWorkingScoreFactor());
+      System.out.println("VictoryScore = " + game.getVictoryScore());
+      System.out.println("ScoreGainRange = " + game.getScoreGainRange());
+      System.out.println("RawMessageMaxLength = " + game.getRawMessageMaxLength());
+      System.out.println("RawMessageTransmissionSpeed = " + game.getRawMessageTransmissionSpeed());
+      System.out.println("WizardRadius = " + game.getWizardRadius());
+      System.out.println("WizardCastRange = " + game.getWizardCastRange());
+      System.out.println("WizardVisionRange = " + game.getWizardVisionRange());
+      System.out.println("WizardForwardSpeed = " + game.getWizardForwardSpeed());
+      System.out.println("WizardBackwardSpeed = " + game.getWizardBackwardSpeed());
+      System.out.println("WizardStrafeSpeed = " + game.getWizardStrafeSpeed());
+      System.out.println("WizardBaseLife = " + game.getWizardBaseLife());
+      System.out.println("WizardLifeGrowthPerLevel = " + game.getWizardLifeGrowthPerLevel());
+      System.out.println("WizardBaseMana = " + game.getWizardBaseMana());
+      System.out.println("WizardManaGrowthPerLevel = " + game.getWizardManaGrowthPerLevel());
+      System.out.println("WizardBaseLifeRegeneration = " + game.getWizardBaseLifeRegeneration());
+      System.out.println(
+          "WizardLifeRegenerationGrowthPerLevel = "
+              + game.getWizardLifeRegenerationGrowthPerLevel());
+      System.out.println("WizardBaseManaRegeneration = " + game.getWizardBaseManaRegeneration());
+      System.out.println(
+          "WizardManaRegenerationGrowthPerLevel = "
+              + game.getWizardManaRegenerationGrowthPerLevel());
+      System.out.println("WizardMaxTurnAngle = " + game.getWizardMaxTurnAngle());
+      System.out.println(
+          "WizardMaxResurrectionDelayTicks = " + game.getWizardMaxResurrectionDelayTicks());
+      System.out.println(
+          "WizardMinResurrectionDelayTicks = " + game.getWizardMinResurrectionDelayTicks());
+      System.out.println("WizardActionCooldownTicks = " + game.getWizardActionCooldownTicks());
+      System.out.println("StaffCooldownTicks = " + game.getStaffCooldownTicks());
+      System.out.println("MagicMissileCooldownTicks = " + game.getMagicMissileCooldownTicks());
+      System.out.println("FrostBoltCooldownTicks = " + game.getFrostBoltCooldownTicks());
+      System.out.println("FireballCooldownTicks = " + game.getFireballCooldownTicks());
+      System.out.println("HasteCooldownTicks = " + game.getHasteCooldownTicks());
+      System.out.println("ShieldCooldownTicks = " + game.getShieldCooldownTicks());
+      System.out.println("MagicMissileManacost = " + game.getMagicMissileManacost());
+      System.out.println("FrostBoltManacost = " + game.getFrostBoltManacost());
+      System.out.println("FireballManacost = " + game.getFireballManacost());
+      System.out.println("HasteManacost = " + game.getHasteManacost());
+      System.out.println("ShieldManacost = " + game.getShieldManacost());
+      System.out.println("StaffDamage = " + game.getStaffDamage());
+      System.out.println("StaffSector = " + game.getStaffSector());
+      System.out.println("StaffRange = " + game.getStaffRange());
+      System.out.println("LevelUpXpValues = " + game.getLevelUpXpValues());
+      System.out.println("MinionRadius = " + game.getMinionRadius());
+      System.out.println("MinionVisionRange = " + game.getMinionVisionRange());
+      System.out.println("MinionSpeed = " + game.getMinionSpeed());
+      System.out.println("MinionMaxTurnAngle = " + game.getMinionMaxTurnAngle());
+      System.out.println("MinionLife = " + game.getMinionLife());
+      System.out.println(
+          "FactionMinionAppearanceIntervalTicks = "
+              + game.getFactionMinionAppearanceIntervalTicks());
+      System.out.println(
+          "OrcWoodcutterActionCooldownTicks = " + game.getOrcWoodcutterActionCooldownTicks());
+      System.out.println("OrcWoodcutterDamage = " + game.getOrcWoodcutterDamage());
+      System.out.println("OrcWoodcutterAttackSector = " + game.getOrcWoodcutterAttackSector());
+      System.out.println("OrcWoodcutterAttackRange = " + game.getOrcWoodcutterAttackRange());
+      System.out.println(
+          "FetishBlowdartActionCooldownTicks = " + game.getFetishBlowdartActionCooldownTicks());
+      System.out.println("FetishBlowdartAttackRange = " + game.getFetishBlowdartAttackRange());
+      System.out.println("FetishBlowdartAttackSector = " + game.getFetishBlowdartAttackSector());
+      System.out.println("BonusRadius = " + game.getBonusRadius());
+      System.out.println(
+          "BonusAppearanceIntervalTicks = " + game.getBonusAppearanceIntervalTicks());
+      System.out.println("BonusScoreAmount = " + game.getBonusScoreAmount());
+      System.out.println("DartRadius = " + game.getDartRadius());
+      System.out.println("DartSpeed = " + game.getDartSpeed());
+      System.out.println("DartDirectDamage = " + game.getDartDirectDamage());
+      System.out.println("MagicMissileRadius = " + game.getMagicMissileRadius());
+      System.out.println("MagicMissileSpeed = " + game.getMagicMissileSpeed());
+      System.out.println("MagicMissileDirectDamage = " + game.getMagicMissileDirectDamage());
+      System.out.println("FrostBoltRadius = " + game.getFrostBoltRadius());
+      System.out.println("FrostBoltSpeed = " + game.getFrostBoltSpeed());
+      System.out.println("FrostBoltDirectDamage = " + game.getFrostBoltDirectDamage());
+      System.out.println("FireballRadius = " + game.getFireballRadius());
+      System.out.println("FireballSpeed = " + game.getFireballSpeed());
+      System.out.println(
+          "FireballExplosionMaxDamageRange = " + game.getFireballExplosionMaxDamageRange());
+      System.out.println(
+          "FireballExplosionMinDamageRange = " + game.getFireballExplosionMinDamageRange());
+      System.out.println("FireballExplosionMaxDamage = " + game.getFireballExplosionMaxDamage());
+      System.out.println("FireballExplosionMinDamage = " + game.getFireballExplosionMinDamage());
+      System.out.println("GuardianTowerRadius = " + game.getGuardianTowerRadius());
+      System.out.println("GuardianTowerVisionRange = " + game.getGuardianTowerVisionRange());
+      System.out.println("GuardianTowerLife = " + game.getGuardianTowerLife());
+      System.out.println("GuardianTowerAttackRange = " + game.getGuardianTowerAttackRange());
+      System.out.println("GuardianTowerDamage = " + game.getGuardianTowerDamage());
+      System.out.println("GuardianTowerCooldownTicks = " + game.getGuardianTowerCooldownTicks());
+      System.out.println("FactionBaseRadius = " + game.getFactionBaseRadius());
+      System.out.println("FactionBaseVisionRange = " + game.getFactionBaseVisionRange());
+      System.out.println("FactionBaseLife = " + game.getFactionBaseLife());
+      System.out.println("FactionBaseAttackRange = " + game.getFactionBaseAttackRange());
+      System.out.println("FactionBaseDamage = " + game.getFactionBaseDamage());
+      System.out.println("FactionBaseCooldownTicks = " + game.getFactionBaseCooldownTicks());
+      System.out.println("BurningDurationTicks = " + game.getBurningDurationTicks());
+      System.out.println("BurningSummaryDamage = " + game.getBurningSummaryDamage());
+      System.out.println("EmpoweredDurationTicks = " + game.getEmpoweredDurationTicks());
+      System.out.println("EmpoweredDamageFactor = " + game.getEmpoweredDamageFactor());
+      System.out.println("FrozenDurationTicks = " + game.getFrozenDurationTicks());
+      System.out.println("HastenedDurationTicks = " + game.getHastenedDurationTicks());
+      System.out.println("HastenedBonusDurationFactor = " + game.getHastenedBonusDurationFactor());
+      System.out.println("HastenedMovementBonusFactor = " + game.getHastenedMovementBonusFactor());
+      System.out.println("HastenedRotationBonusFactor = " + game.getHastenedRotationBonusFactor());
+      System.out.println("ShieldedDurationTicks = " + game.getShieldedDurationTicks());
+      System.out.println("ShieldedBonusDurationFactor = " + game.getShieldedBonusDurationFactor());
+      System.out.println(
+          "ShieldedDirectDamageAbsorptionFactor = "
+              + game.getShieldedDirectDamageAbsorptionFactor());
+      System.out.println("AuraSkillRange = " + game.getAuraSkillRange());
+      System.out.println("RangeBonusPerSkillLevel = " + game.getRangeBonusPerSkillLevel());
+      System.out.println(
+          "MagicalDamageBonusPerSkillLevel = " + game.getMagicalDamageBonusPerSkillLevel());
+      System.out.println(
+          "StaffDamageBonusPerSkillLevel = " + game.getStaffDamageBonusPerSkillLevel());
+      System.out.println(
+          "MovementBonusFactorPerSkillLevel = " + game.getMovementBonusFactorPerSkillLevel());
+      System.out.println(
+          "MagicalDamageAbsorptionPerSkillLevel = "
+              + game.getMagicalDamageAbsorptionPerSkillLevel());
+    }
+
     public void move(Wizard self, World world, Game game, Move move) {
+      this.self = self;
+      this.world = world;
+      this.game = game;
+
       field.update(self, world, game);
       walker.update(self, world, game);
       shooter.update(self, world, game);
