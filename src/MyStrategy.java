@@ -1149,6 +1149,14 @@ public final class MyStrategy implements Strategy {
     public LivingUnit getTarget(double range) {
       LivingUnit buildingTarget = getTargetHomo(world.getBuildings(), range);
       LivingUnit wizardTarget = getTargetHomo(world.getWizards(), range);
+      LivingUnit closestWoodcutter = getClosestWoodcutter();
+      if (closestWoodcutter != null
+          && self.getDistanceTo(closestWoodcutter)
+              < self.getRadius() * 1.5
+                  + closestWoodcutter.getRadius()
+                  + game.getOrcWoodcutterAttackRange()) {
+        return closestWoodcutter;
+      }
       if (buildingTarget == null && wizardTarget == null) {
         LivingUnit fetishTarget = getTargetHomo(brain.getFetishes(), range);
         LivingUnit woodcutterTarget = getTargetHomo(brain.getWoodcutters(), range);
@@ -1163,6 +1171,22 @@ public final class MyStrategy implements Strategy {
         return wizardTarget;
       }
       return buildingTarget;
+    }
+
+    private LivingUnit getClosestWoodcutter() {
+      LivingUnit closestWoodcutter = null;
+      double closestWoodcutterDistance = 0;
+      for (Minion minion : world.getMinions()) {
+        if (!brain.isEnemy(minion) || minion.getType() != MinionType.ORC_WOODCUTTER) {
+          continue;
+        }
+        double distance = self.getDistanceTo(minion);
+        if (closestWoodcutter == null || distance < closestWoodcutterDistance) {
+          closestWoodcutter = minion;
+          closestWoodcutterDistance = distance;
+        }
+      }
+      return closestWoodcutter;
     }
 
     private LivingUnit getTargetHomo(LivingUnit[] units, double range) {
