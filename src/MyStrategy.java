@@ -545,8 +545,10 @@ public final class MyStrategy implements Strategy {
                 ? new Point2D(200.0D, mapSize - 600.0D)
                 : new Point2D(600.0D, mapSize - 200.0D),
             new Point2D(800.0D, mapSize - 800.0D),
+            new Point2D(mapSize * 0.35, mapSize * 0.65),
             new Point2D(mapSize * 0.45, mapSize * 0.55),
             new Point2D(mapSize * 0.55, mapSize * 0.45),
+            new Point2D(mapSize * 0.65, mapSize * 0.35),
             new Point2D(mapSize - 550.0D, 400.0D)
           });
 
