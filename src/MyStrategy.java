@@ -358,6 +358,13 @@ public final class MyStrategy implements Strategy {
         }
       }
 
+      int[] cooldown = self.getRemainingCooldownTicksByAction();
+      if (self.getRemainingActionCooldownTicks() == 0
+          && cooldown[ActionType.STAFF.ordinal()] == 0
+          && cooldown[ActionType.MAGIC_MISSILE.ordinal()] >= game.getWizardActionCooldownTicks()) {
+        move.setAction(ActionType.STAFF);
+      }
+
       if (debug != null) {
         if (false) {
           int N = 5;
@@ -609,7 +616,7 @@ public final class MyStrategy implements Strategy {
         }
         oldPosition = new Point2D(self);
       }
-      if (debug != null) {
+      if (debug != null && oldPosition != null) {
         debug.drawCircle(oldPosition.getX(), oldPosition.getY(), self.getRadius(), Color.gray);
       }
 
