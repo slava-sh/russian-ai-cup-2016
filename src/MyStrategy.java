@@ -598,7 +598,7 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      if (world.getTickIndex() % 100 == 0) {
+      if (world.getTickIndex() % 200 == 0) {
         if (oldPosition != null
             && bonus != null
             && oldPosition.getDistanceTo(self) < self.getRadius()) {
