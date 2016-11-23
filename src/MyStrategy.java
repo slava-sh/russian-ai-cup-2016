@@ -10,7 +10,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Random;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -89,7 +88,6 @@ public final class MyStrategy implements Strategy {
     private final Faction ENEMY_FRACTION;
 
     private final Visualizer debug;
-    private final Random random;
     private final Field field;
     private final Walker walker;
     private final Shooter shooter;
@@ -278,7 +276,29 @@ public final class MyStrategy implements Strategy {
       }
 
       boolean lowHP = self.getLife() < 40;
+
       Point2D bonus = field.getBonus();
+      // Restrict bonus chasing area.
+      Point2D a1 = new Point2D(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
+      Point2D b1 = new Point2D(game.getMapSize() * (1 - 0.1), game.getMapSize() * (1 - 0.2));
+      Point2D a2 = new Point2D(game.getMapSize() * 0.1, game.getMapSize() * 0.2);
+      Point2D b2 = new Point2D(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
+      Point2D center = new Point2D(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
+      Point2D pself = new Point2D(self);
+      if (debug != null) {
+        debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
+        debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
+        debug.fillCircle(center.getX(), center.getY(), 1000, Color.lightGray);
+      }
+      if (bonus != null
+          && center.getDistanceTo(self) > 1000
+          && Point2D.isClockwise(a1, b1, pself) == Point2D.isClockwise(a2, b2, pself)) {
+        bonus = null;
+      }
+      if (debug != null && bonus != null) {
+        debug.drawCircle(self.getX(), self.getY(), 10, Color.green);
+      }
+
       Point2D walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
       LivingUnit shootingTarget = shooter.getTarget();
 
@@ -314,14 +334,16 @@ public final class MyStrategy implements Strategy {
       }
 
       if (debug != null) {
-        int N = 5;
-        double R = self.getCastRange() * 2 / 3;
-        for (double dx = -R; dx < R; dx += R / N) {
-          for (double dy = -R; dy < R; dy += R / N) {
-            Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
-            debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
-            for (Building building : world.getBuildings()) {
-              if (isEnemy(building)) {}
+        if (false) {
+          int N = 5;
+          double R = self.getCastRange() * 2 / 3;
+          for (double dx = -R; dx < R; dx += R / N) {
+            for (double dy = -R; dy < R; dy += R / N) {
+              Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
+              debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
+              for (Building building : world.getBuildings()) {
+                if (isEnemy(building)) {}
+              }
             }
           }
         }
@@ -332,6 +354,8 @@ public final class MyStrategy implements Strategy {
 
         if (shootingTarget != null) {
           debug.fillCircle(shootingTarget.getX(), shootingTarget.getY(), 5, Color.red);
+          debug.drawLine(
+              self.getX(), self.getY(), shootingTarget.getX(), shootingTarget.getY(), Color.red);
         }
 
         for (Building building : world.getBuildings()) {
@@ -1102,6 +1126,15 @@ public final class MyStrategy implements Strategy {
 
     public static Point2D fromPolar(double radius, double angle) {
       return new Point2D(radius * Math.cos(angle), radius * Math.sin(angle));
+    }
+
+    public static boolean isClockwise(Point2D base, Point2D first, Point2D second) {
+      return first.sub(base).isClockwiseTo(second.sub(base));
+    }
+
+    @Override
+    public String toString() {
+      return "(" + x + ", " + y + ')';
     }
 
     public double getX() {
