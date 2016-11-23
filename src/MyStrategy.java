@@ -342,25 +342,22 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      if (lowHP == false && shootingTarget == null) {
+      if (!lowHP && shootingTarget == null) {
         walker.turnTo(walkingTarget, move);
         walker.goTo(walkingTarget, move);
-      } else if (lowHP == false && shootingTarget != null) {
+      } else if (!lowHP && shootingTarget != null) {
         walker.turnTo(shootingTarget, move);
         if (bonus != null) {
           walker.goTo(walkingTarget, move);
         } else if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
           walker.goTo(shootingTarget, move);
         }
-      } else if (lowHP == true && shootingTarget == null) {
-        walker.turnTo(walkingTarget, move);
+      } else if (lowHP) {
+        walker.turnTo(shootingTarget != null ? new Point2D(shootingTarget) : walkingTarget, move);
         if (reallyLowHP || inDanger) {
           walker.goTo(field.getPreviousWaypoint(), move);
-        }
-      } else if (lowHP == true && shootingTarget != null) {
-        walker.turnTo(shootingTarget, move);
-        if (reallyLowHP || inDanger) {
-          walker.goTo(field.getPreviousWaypoint(), move);
+        } else {
+          walker.goTo(walkingTarget, move);
         }
       }
 
