@@ -285,13 +285,14 @@ public final class MyStrategy implements Strategy {
       Point2D b2 = new Point2D(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
       Point2D center = new Point2D(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
       Point2D pself = new Point2D(self);
+      double BONUS_CHASE_RADIUS = 600;
       if (debug != null) {
         debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
         debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
-        debug.drawCircle(center.getX(), center.getY(), 1000, Color.lightGray);
+        debug.drawCircle(center.getX(), center.getY(), BONUS_CHASE_RADIUS, Color.lightGray);
       }
       if (bonus != null
-          && center.getDistanceTo(self) > 1000
+          && center.getDistanceTo(self) > BONUS_CHASE_RADIUS
           && Point2D.isClockwise(a1, b1, pself) == Point2D.isClockwise(a2, b2, pself)) {
         bonus = null;
       }
@@ -503,6 +504,7 @@ public final class MyStrategy implements Strategy {
                 : new Point2D(600.0D, mapSize - 200.0D),
             new Point2D(800.0D, mapSize - 800.0D),
             new Point2D(mapSize * 0.45, mapSize * 0.55),
+            new Point2D(mapSize * 0.55, mapSize * 0.45),
             new Point2D(mapSize - 550.0D, 400.0D)
           });
 
