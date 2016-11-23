@@ -288,7 +288,7 @@ public final class MyStrategy implements Strategy {
       if (debug != null) {
         debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
         debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
-        debug.fillCircle(center.getX(), center.getY(), 1000, Color.lightGray);
+        debug.drawCircle(center.getX(), center.getY(), 1000, Color.lightGray);
       }
       if (bonus != null
           && center.getDistanceTo(self) > 1000
@@ -296,7 +296,7 @@ public final class MyStrategy implements Strategy {
         bonus = null;
       }
       if (debug != null && bonus != null) {
-        debug.drawCircle(self.getX(), self.getY(), 10, Color.green);
+        debug.fillCircle(self.getX(), self.getY(), 10, Color.green);
       }
 
       Point2D walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
