@@ -10,6 +10,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -277,6 +278,23 @@ public final class MyStrategy implements Strategy {
 
       boolean lowHP = self.getLife() < 50;
 
+      BiPredicate<Unit, Double> endangeredBy =
+          (u, attackRange) ->
+              isEnemy(u) && self.getDistanceTo(u) < attackRange + self.getRadius() * 1.5;
+      boolean inDanger =
+          Arrays.asList(world.getWizards())
+                  .stream()
+                  .anyMatch(w -> endangeredBy.test(w, w.getCastRange()))
+              || Arrays.asList(world.getBuildings())
+                  .stream()
+                  .anyMatch(b -> endangeredBy.test(b, b.getAttackRange()))
+              || Arrays.asList(world.getMinions())
+                  .stream()
+                  .anyMatch(m -> endangeredBy.test(m, getMinionAttackRange(m)));
+      if (inDanger && debug != null) {
+        debug.drawCircle(self.getX(), self.getY(), self.getRadius() / 2, Color.red);
+      }
+
       Point2D bonus = field.getBonus();
       // Restrict bonus chasing area.
       Point2D a1 = new Point2D(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
@@ -301,7 +319,8 @@ public final class MyStrategy implements Strategy {
       }
 
       Point2D walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
-      LivingUnit shootingTarget = shooter.getTarget();
+      LivingUnit shootingTarget =
+          shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
       if (shootingTarget != null) {
         double distance = self.getDistanceTo(shootingTarget);
@@ -328,10 +347,14 @@ public final class MyStrategy implements Strategy {
         }
       } else if (lowHP == true && shootingTarget == null) {
         walker.turnTo(walkingTarget, move);
-        walker.goTo(field.getPreviousWaypoint(), move);
+        if (inDanger) {
+          walker.goTo(field.getPreviousWaypoint(), move);
+        }
       } else if (lowHP == true && shootingTarget != null) {
         walker.turnTo(shootingTarget, move);
-        walker.goTo(field.getPreviousWaypoint(), move);
+        if (inDanger) {
+          walker.goTo(field.getPreviousWaypoint(), move);
+        }
       }
 
       if (debug != null) {
@@ -384,6 +407,12 @@ public final class MyStrategy implements Strategy {
 
         debug.drawBeforeScene();
       }
+    }
+
+    private double getMinionAttackRange(Minion m) {
+      return m.getType() == MinionType.FETISH_BLOWDART
+          ? game.getFetishBlowdartAttackRange()
+          : game.getOrcWoodcutterAttackRange();
     }
 
     private Tree getClosestTree(Wizard self, World world) {
@@ -546,8 +575,7 @@ public final class MyStrategy implements Strategy {
       if (world.getTickIndex() % 100 == 0) {
         if (oldPosition != null
             && bonus != null
-            && oldPosition.getDistanceTo(self) < self.getRadius() * 2) {
-          bonus = null;
+            && oldPosition.getDistanceTo(self) < self.getRadius()) {
           if (debug != null) {
             System.out.println("stuck chasing a bonus");
           }
@@ -1085,11 +1113,11 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public LivingUnit getTarget() {
-      LivingUnit buildingTarget = getTargetHomo(world.getBuildings());
-      LivingUnit wizardTarget = getTargetHomo(world.getWizards());
+    public LivingUnit getTarget(double range) {
+      LivingUnit buildingTarget = getTargetHomo(world.getBuildings(), range);
+      LivingUnit wizardTarget = getTargetHomo(world.getWizards(), range);
       if (buildingTarget == null && wizardTarget == null) {
-        return getTargetHomo(world.getMinions());
+        return getTargetHomo(world.getMinions(), range);
       }
       if (buildingTarget == null) {
         return wizardTarget;
@@ -1097,13 +1125,13 @@ public final class MyStrategy implements Strategy {
       return buildingTarget;
     }
 
-    private LivingUnit getTargetHomo(LivingUnit[] units) {
+    private LivingUnit getTargetHomo(LivingUnit[] units, double range) {
       LivingUnit bestTarget = null;
       for (LivingUnit target : units) {
         if (!brain.isEnemy(target)) {
           continue;
         }
-        if (self.getDistanceTo(target) > self.getVisionRange()) {
+        if (self.getDistanceTo(target) > range) {
           continue;
         }
         if (bestTarget == null || target.getLife() < bestTarget.getLife()) {
