@@ -276,7 +276,8 @@ public final class MyStrategy implements Strategy {
         return;
       }
 
-      boolean lowHP = self.getLife() < 50;
+      boolean lowHP = self.getLife() < 60;
+      boolean reallyLowHP = self.getLife() < 40;
 
       BiPredicate<Unit, Double> endangeredBy =
           (u, attackRange) ->
@@ -347,12 +348,12 @@ public final class MyStrategy implements Strategy {
         }
       } else if (lowHP == true && shootingTarget == null) {
         walker.turnTo(walkingTarget, move);
-        if (inDanger) {
+        if (reallyLowHP || inDanger) {
           walker.goTo(field.getPreviousWaypoint(), move);
         }
       } else if (lowHP == true && shootingTarget != null) {
         walker.turnTo(shootingTarget, move);
-        if (inDanger) {
+        if (reallyLowHP || inDanger) {
           walker.goTo(field.getPreviousWaypoint(), move);
         }
       }
