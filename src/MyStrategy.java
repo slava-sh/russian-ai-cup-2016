@@ -1132,11 +1132,13 @@ public final class MyStrategy implements Strategy {
       LivingUnit wizardTarget = getTargetHomo(world.getWizards(), range);
       if (buildingTarget == null && wizardTarget == null) {
         LivingUnit fetishTarget = getTargetHomo(brain.getFetishes(), range);
-        if (fetishTarget != null) {
-          return fetishTarget;
-        }
         LivingUnit woodcutterTarget = getTargetHomo(brain.getWoodcutters(), range);
-        return woodcutterTarget;
+        if (fetishTarget != null
+            && woodcutterTarget != null
+            && woodcutterTarget.getLife() <= game.getMagicMissileDirectDamage()) {
+          return woodcutterTarget;
+        }
+        return fetishTarget != null ? fetishTarget : woodcutterTarget;
       }
       if (buildingTarget == null) {
         return wizardTarget;
