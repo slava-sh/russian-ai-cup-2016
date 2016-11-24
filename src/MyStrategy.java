@@ -594,7 +594,7 @@ public final class MyStrategy implements Strategy {
             new Point(mapSize * 0.45, mapSize * 0.55),
             new Point(mapSize * 0.55, mapSize * 0.45),
             new Point(mapSize * 0.65, mapSize * 0.35),
-            new Point(mapSize - 550.0D, 400.0D)
+            new Point(mapSize * 0.75, mapSize * 0.25),
           };
     }
 
