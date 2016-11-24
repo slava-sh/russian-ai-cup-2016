@@ -1061,4 +1061,42 @@ public final class MyStrategy implements Strategy {
       return new Point(x * cos - y * sin, y * cos + x * sin);
     }
   }
+
+  private static class Square {
+
+    private final int centerX;
+    private final int centerY;
+
+    private Square(int centerX, int centerY) {
+      this.centerX = centerX;
+      this.centerY = centerY;
+    }
+
+    @Override
+    public String toString() {
+      return "Square{" + centerX + ", " + centerY + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      Square square = (Square) o;
+      if (centerX != square.centerX) return false;
+      return centerY == square.centerY;
+    }
+
+    @Override
+    public int hashCode() {
+      return centerX * 100000 + centerY;
+    }
+
+    public int getCenterX() {
+      return centerX;
+    }
+
+    public int getCenterY() {
+      return centerY;
+    }
+  }
 }
