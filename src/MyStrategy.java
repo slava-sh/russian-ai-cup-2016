@@ -289,8 +289,8 @@ public final class MyStrategy implements Strategy {
         debug.drawBeforeScene();
       }
 
-      Point2D bonus = maybeGetBonus();
-      Point2D walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
+      Point bonus = maybeGetBonus();
+      Point walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
@@ -318,7 +318,7 @@ public final class MyStrategy implements Strategy {
           walker.goTo(shootingTarget, move);
         }
       } else if (lowHP) {
-        walker.turnTo(shootingTarget != null ? new Point2D(shootingTarget) : walkingTarget, move);
+        walker.turnTo(shootingTarget != null ? new Point(shootingTarget) : walkingTarget, move);
         if (reallyLowHP || inDanger) {
           walker.goTo(field.getPreviousWaypoint(), move);
         } else {
@@ -339,7 +339,7 @@ public final class MyStrategy implements Strategy {
           double R = self.getCastRange() * 2 / 3;
           for (double dx = -R; dx < R; dx += R / N) {
             for (double dy = -R; dy < R; dy += R / N) {
-              Point2D point = new Point2D(self.getX() + dx, self.getY() + dy);
+              Point point = new Point(self.getX() + dx, self.getY() + dy);
               debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
               for (Building building : world.getBuildings()) {
                 if (isEnemy(building)) {}
@@ -397,21 +397,21 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private Point2D maybeGetBonus() {
-      Point2D bonus = bonusFinder.findBonus();
+    private Point maybeGetBonus() {
+      Point bonus = bonusFinder.findBonus();
 
       // Restrict bonus chasing area.
-      Point2D a1 = new Point2D(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
-      Point2D b1 = new Point2D(game.getMapSize() * (1 - 0.1), game.getMapSize() * (1 - 0.2));
-      Point2D a2 = new Point2D(game.getMapSize() * 0.1, game.getMapSize() * 0.2);
-      Point2D b2 = new Point2D(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
-      Point2D center = new Point2D(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
+      Point a1 = new Point(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
+      Point b1 = new Point(game.getMapSize() * (1 - 0.1), game.getMapSize() * (1 - 0.2));
+      Point a2 = new Point(game.getMapSize() * 0.1, game.getMapSize() * 0.2);
+      Point b2 = new Point(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
+      Point center = new Point(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
 
       double BONUS_CHASE_RADIUS = 300;
-      Point2D selfPoint = new Point2D(self);
+      Point selfPoint = new Point(self);
       if (bonus != null
           && center.getDistanceTo(self) > BONUS_CHASE_RADIUS
-          && Point2D.isClockwise(a1, b1, selfPoint) == Point2D.isClockwise(a2, b2, selfPoint)) {
+          && Point.isClockwise(a1, b1, selfPoint) == Point.isClockwise(a2, b2, selfPoint)) {
         bonus = null;
       }
 
@@ -457,8 +457,8 @@ public final class MyStrategy implements Strategy {
       return unit.getFaction() == ALLY_FRACTION;
     }
 
-    Point2D predictPosition(Unit unit, double ticksFromNow) {
-      return new Point2D(
+    Point predictPosition(Unit unit, double ticksFromNow) {
+      return new Point(
           unit.getX() + unit.getSpeedX() * ticksFromNow,
           unit.getY() + unit.getSpeedY() * ticksFromNow);
     }
@@ -471,7 +471,7 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    void drawPath(List<Point2D> path, Color color) {
+    void drawPath(List<Point> path, Color color) {
       for (int i = 1; i < path.size(); ++i) {
         debug.drawLine(
             path.get(i - 1).getX(),
@@ -520,8 +520,8 @@ public final class MyStrategy implements Strategy {
 
   private static class BonusFinder extends WorldObserver {
 
-    private Point2D bonus;
-    private Point2D oldPosition;
+    private Point bonus;
+    private Point oldPosition;
 
     public BonusFinder(Brain brain, Visualizer debug) {
       super(brain, debug);
@@ -531,8 +531,8 @@ public final class MyStrategy implements Strategy {
     public void update() {
       if (world.getTickIndex() != 0
           && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
-        Point2D b1 = new Point2D(game.getMapSize() * 0.3, game.getMapSize() * 0.3);
-        Point2D b2 = new Point2D(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
+        Point b1 = new Point(game.getMapSize() * 0.3, game.getMapSize() * 0.3);
+        Point b2 = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
         bonus = b1.getDistanceTo(self) < b2.getDistanceTo(self) ? b1 : b2;
         oldPosition = null;
         if (debug != null) {
@@ -549,7 +549,7 @@ public final class MyStrategy implements Strategy {
           }
           bonus = null;
         }
-        oldPosition = new Point2D(self);
+        oldPosition = new Point(self);
       }
       if (debug != null && oldPosition != null) {
         debug.drawCircle(oldPosition.getX(), oldPosition.getY(), self.getRadius(), Color.gray);
@@ -569,14 +569,14 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public Point2D findBonus() {
+    public Point findBonus() {
       return bonus;
     }
   }
 
   private static class Field extends WorldObserver {
 
-    private final Point2D[] waypoints;
+    private final Point[] waypoints;
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
@@ -584,17 +584,17 @@ public final class MyStrategy implements Strategy {
       double mapSize = game.getMapSize();
 
       waypoints =
-          new Point2D[] {
-            new Point2D(100.0D, mapSize - 100.0D),
+          new Point[] {
+            new Point(100.0D, mapSize - 100.0D),
             self.getId() == 1 || self.getId() == 2 || self.getId() == 6 || self.getId() == 7
-                ? new Point2D(200.0D, mapSize - 600.0D)
-                : new Point2D(600.0D, mapSize - 200.0D),
-            new Point2D(800.0D, mapSize - 800.0D),
-            new Point2D(mapSize * 0.35, mapSize * 0.65),
-            new Point2D(mapSize * 0.45, mapSize * 0.55),
-            new Point2D(mapSize * 0.55, mapSize * 0.45),
-            new Point2D(mapSize * 0.65, mapSize * 0.35),
-            new Point2D(mapSize - 550.0D, 400.0D)
+                ? new Point(200.0D, mapSize - 600.0D)
+                : new Point(600.0D, mapSize - 200.0D),
+            new Point(800.0D, mapSize - 800.0D),
+            new Point(mapSize * 0.35, mapSize * 0.65),
+            new Point(mapSize * 0.45, mapSize * 0.55),
+            new Point(mapSize * 0.55, mapSize * 0.45),
+            new Point(mapSize * 0.65, mapSize * 0.35),
+            new Point(mapSize - 550.0D, 400.0D)
           };
     }
 
@@ -616,12 +616,12 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public Point2D getNextWaypoint() {
+    public Point getNextWaypoint() {
       int lastWaypointIndex = waypoints.length - 1;
-      Point2D lastWaypoint = waypoints[lastWaypointIndex];
+      Point lastWaypoint = waypoints[lastWaypointIndex];
 
       for (int waypointIndex = 0; waypointIndex < lastWaypointIndex; ++waypointIndex) {
-        Point2D waypoint = waypoints[waypointIndex];
+        Point waypoint = waypoints[waypointIndex];
 
         if (waypoint.getDistanceTo(self) <= self.getRadius() * 2) {
           return waypoints[waypointIndex + 1];
@@ -635,11 +635,11 @@ public final class MyStrategy implements Strategy {
       return lastWaypoint;
     }
 
-    public Point2D getPreviousWaypoint() {
-      Point2D firstWaypoint = waypoints[0];
+    public Point getPreviousWaypoint() {
+      Point firstWaypoint = waypoints[0];
 
       for (int waypointIndex = waypoints.length - 1; waypointIndex > 0; --waypointIndex) {
-        Point2D waypoint = waypoints[waypointIndex];
+        Point waypoint = waypoints[waypointIndex];
 
         if (waypoint.getDistanceTo(self) <= self.getRadius() * 2) {
           return waypoints[waypointIndex - 1];
@@ -705,7 +705,7 @@ public final class MyStrategy implements Strategy {
       super(brain, debug);
     }
 
-    public void goTo(Point2D target, Move move) {
+    public void goTo(Point target, Move move) {
       double angle = self.getAngleTo(target.getX(), target.getY());
 
       boolean hastened =
@@ -713,35 +713,35 @@ public final class MyStrategy implements Strategy {
       double speedMultiplier = hastened ? 1 + game.getHastenedMovementBonusFactor() : 1;
 
       int aSign = Math.abs(angle) < Math.PI / 2 ? 1 : -1;
-      Point2D a =
+      Point a =
           aSign == 1
-              ? Point2D.fromPolar(speedMultiplier * game.getWizardForwardSpeed(), self.getAngle())
-              : Point2D.fromPolar(speedMultiplier * game.getWizardBackwardSpeed(), self.getAngle())
+              ? Point.fromPolar(speedMultiplier * game.getWizardForwardSpeed(), self.getAngle())
+              : Point.fromPolar(speedMultiplier * game.getWizardBackwardSpeed(), self.getAngle())
                   .negate();
 
       int bSign = angle > 0 ? 1 : -1;
-      Point2D b =
+      Point b =
           bSign == 1
-              ? Point2D.fromPolar(
+              ? Point.fromPolar(
                   speedMultiplier * game.getWizardStrafeSpeed(), self.getAngle() + Math.PI / 2)
-              : Point2D.fromPolar(
+              : Point.fromPolar(
                   speedMultiplier * game.getWizardStrafeSpeed(), self.getAngle() - Math.PI / 2);
 
-      Point2D ba = a.sub(b);
+      Point ba = a.sub(b);
       boolean aIsClockwiseToB = a.isClockwiseTo(b);
-      Point2D direction = target.sub(new Point2D(self));
+      Point direction = target.sub(new Point(self));
       double k =
           binarySearch(
               0,
               1,
               m -> {
-                Point2D v = direction.mul(m);
-                Point2D bv = v.sub(b);
+                Point v = direction.mul(m);
+                Point bv = v.sub(b);
                 return bv.isClockwiseTo(ba) == aIsClockwiseToB;
               });
 
       // Speed.
-      Point2D v = direction.mul(k);
+      Point v = direction.mul(k);
 
       // Try avoiding collisions.
       final int T = 8; // Look-ahead ticks.
@@ -751,7 +751,7 @@ public final class MyStrategy implements Strategy {
         for (int i = 1; i <= N * 2; ++i) {
           int j = i / 2;
           int sign = i % 2 == 0 ? 1 : -1;
-          Point2D newV = v.rotate(sign * Math.PI * 2 * j / N);
+          Point newV = v.rotate(sign * Math.PI * 2 * j / N);
           debug.drawCircle(
               self.getX() + T * newV.getX(), self.getY() + T * newV.getY(), 3, Color.orange);
         }
@@ -763,8 +763,8 @@ public final class MyStrategy implements Strategy {
       for (int i = 1; i <= N * 2; ++i) {
         int j = i / 2;
         int sign = i % 1 == 0 ? 1 : -1;
-        Point2D newV = v.rotate(sign * Math.PI * 2 * j / N);
-        Point2D newSelf = newV.mul(T).add(new Point2D(self));
+        Point newV = v.rotate(sign * Math.PI * 2 * j / N);
+        Point newSelf = newV.mul(T).add(new Point(self));
         boolean noCollisions =
             obstacles
                 .stream()
@@ -783,25 +783,25 @@ public final class MyStrategy implements Strategy {
 
         boolean DISPLAY_BOX = false;
         if (DISPLAY_BOX) {
-          List<Point2D> box = new ArrayList<>();
+          List<Point> box = new ArrayList<>();
           box.add(
-              new Point2D(
+              new Point(
                   self.getX() + T * game.getWizardForwardSpeed() * Math.cos(self.getAngle()),
                   self.getY() + T * game.getWizardForwardSpeed() * Math.sin(self.getAngle())));
           box.add(
-              new Point2D(
+              new Point(
                   self.getX()
                       + T * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
                   self.getY()
                       + T * game.getWizardStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2)));
           box.add(
-              new Point2D(
+              new Point(
                   self.getX()
                       + T * game.getWizardBackwardSpeed() * Math.cos(self.getAngle() + Math.PI),
                   self.getY()
                       + T * game.getWizardBackwardSpeed() * Math.sin(self.getAngle() + Math.PI)));
           box.add(
-              new Point2D(
+              new Point(
                   self.getX()
                       + T
                           * game.getWizardStrafeSpeed()
@@ -853,17 +853,17 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public void turnTo(Point2D point, Move move) {
+    public void turnTo(Point point, Move move) {
       double angle = self.getAngleTo(point.getX(), point.getY());
       move.setTurn(angle);
     }
 
     public void goTo(Unit unit, Move move) {
-      goTo(new Point2D(unit), move);
+      goTo(new Point(unit), move);
     }
 
     public void turnTo(Unit unit, Move move) {
-      turnTo(new Point2D(unit), move);
+      turnTo(new Point(unit), move);
     }
   }
 
@@ -956,31 +956,31 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private static class Point2D {
+  private static class Point {
 
     private final double x;
     private final double y;
 
-    public Point2D(double x, double y) {
+    public Point(double x, double y) {
       this.x = x;
       this.y = y;
     }
 
-    public Point2D(Unit unit) {
+    public Point(Unit unit) {
       this(unit.getX(), unit.getY());
     }
 
-    public static Point2D fromPolar(double radius, double angle) {
-      return new Point2D(radius * Math.cos(angle), radius * Math.sin(angle));
+    public static Point fromPolar(double radius, double angle) {
+      return new Point(radius * Math.cos(angle), radius * Math.sin(angle));
     }
 
-    public static boolean isClockwise(Point2D base, Point2D first, Point2D second) {
+    public static boolean isClockwise(Point base, Point first, Point second) {
       return first.sub(base).isClockwiseTo(second.sub(base));
     }
 
     @Override
     public String toString() {
-      return "(" + x + ", " + y + ')';
+      return "Point{" + x + ", " + y + '}';
     }
 
     public double getX() {
@@ -995,7 +995,7 @@ public final class MyStrategy implements Strategy {
       return StrictMath.hypot(this.x - x, this.y - y);
     }
 
-    public double getDistanceTo(Point2D point) {
+    public double getDistanceTo(Point point) {
       return getDistanceTo(point.x, point.y);
     }
 
@@ -1003,51 +1003,51 @@ public final class MyStrategy implements Strategy {
       return getDistanceTo(unit.getX(), unit.getY());
     }
 
-    public Point2D negate() {
-      return new Point2D(-x, -y);
+    public Point negate() {
+      return new Point(-x, -y);
     }
 
-    public Point2D unit() {
+    public Point unit() {
       double len = length();
-      return new Point2D(x / len, y / len);
+      return new Point(x / len, y / len);
     }
 
     public double length() {
       return Math.sqrt(x * x + y * y);
     }
 
-    public Point2D mul(double k) {
-      return new Point2D(k * x, k * y);
+    public Point mul(double k) {
+      return new Point(k * x, k * y);
     }
 
-    public Point2D add(Point2D other) {
-      return new Point2D(this.x + other.x, this.y + other.y);
+    public Point add(Point other) {
+      return new Point(this.x + other.x, this.y + other.y);
     }
 
-    public Point2D sub(Point2D other) {
-      return new Point2D(this.x - other.x, this.y - other.y);
+    public Point sub(Point other) {
+      return new Point(this.x - other.x, this.y - other.y);
     }
 
-    public double dot(Point2D other) {
+    public double dot(Point other) {
       return this.x * other.x + this.y * other.y;
     }
 
-    public double cross(Point2D other) {
+    public double cross(Point other) {
       return this.x * other.y - this.y * other.x;
     }
 
-    public boolean isClockwiseTo(Point2D other) {
+    public boolean isClockwiseTo(Point other) {
       return cross(other) < 0;
     }
 
-    public double project(Point2D other) {
+    public double project(Point other) {
       return this.dot(other.unit());
     }
 
-    public Point2D rotate(double angle) {
+    public Point rotate(double angle) {
       double sin = Math.sin(angle);
       double cos = Math.cos(angle);
-      return new Point2D(x * cos - y * sin, y * cos + x * sin);
+      return new Point(x * cos - y * sin, y * cos + x * sin);
     }
   }
 }
