@@ -310,8 +310,13 @@ public final class MyStrategy implements Strategy {
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
-      List<Square> path = field.findPath(Square.containing(walkingTarget), Square.containing(self));
-      drawPath(path, Color.pink);
+      List<Square> path =
+          field.findPath(
+              Square.containing(new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7)),
+              Square.containing(self));
+      if (path != null) {
+        drawPath(path, Color.pink);
+      }
 
       if (shootingTarget != null) {
         double distance = self.getDistanceTo(shootingTarget);
@@ -648,20 +653,22 @@ public final class MyStrategy implements Strategy {
     private void updateBlockedSquares() {
       blockedSquares.clear();
       for (LivingUnit unit : getAllObstacles()) {
-        Square topLeft =
-            Square.containing(unit.getX() - unit.getRadius(), unit.getY() - unit.getRadius());
-        Square bottomRight =
-            Square.containing(unit.getX() + unit.getRadius(), unit.getY() + unit.getRadius());
+        if (unit.getLife() <= game.getMagicMissileDirectDamage()) {
+          continue;
+        }
+        double r = unit.getRadius() + self.getRadius() * 1.1;
+        Square topLeft = Square.containing(unit.getX() - r, unit.getY() - r);
+        Square bottomRight = Square.containing(unit.getX() + r, unit.getY() + r);
         for (int p = topLeft.getP(); p <= bottomRight.getP(); ++p) {
           for (int q = topLeft.getQ(); q <= bottomRight.getQ(); ++q) {
             Square square = new Square(p, q);
-            if (unit.getDistanceTo(square.getCenterX(), square.getCenterY())
-                < unit.getRadius() + SQUARE_CRUDENESS / 2) {
+            if (unit.getDistanceTo(square.getCenterX(), square.getCenterY()) < r) {
               blockedSquares.add(square);
             }
           }
         }
       }
+      blockedSquares.remove(Square.containing(self));
 
       if (debug != null) {
         for (Square square : blockedSquares) {
@@ -734,9 +741,8 @@ public final class MyStrategy implements Strategy {
       distanceGuess.put(start, 0);
       queue.add(start);
 
-      int i = 0;
-      while (!queue.isEmpty() && i < 300) {
-        i++;
+      final int MAX_STEPS = 100;
+      for (int i = 0; !queue.isEmpty() && i < MAX_STEPS; ++i) {
         Square point = queue.first();
         queue.remove(point);
 
@@ -761,16 +767,6 @@ public final class MyStrategy implements Strategy {
             queue.remove(neighbor);
             queue.add(neighbor);
           }
-
-          if (debug != null) {
-            debug.drawLine(
-                point.getCenterX(),
-                point.getCenterY(),
-                neighbor.getCenterX(),
-                neighbor.getCenterY(),
-                Color.lightGray);
-            debug.drawBeforeScene();
-          }
         }
       }
 
@@ -779,7 +775,7 @@ public final class MyStrategy implements Strategy {
         path.add(point);
       }
       Collections.reverse(path);
-      return path;
+      return !path.isEmpty() ? path : null;
     }
 
     private Square[] getNeighbors(Square square) {
