@@ -112,10 +112,8 @@ public final class MyStrategy implements Strategy {
         Class<?> clazz = Class.forName("DebugVisualizer");
         Object instance = clazz.getConstructor().newInstance();
         debugVisualizer = (Visualizer) instance;
-      } catch (ClassNotFoundException e) {
-        // Visualizer is not available.
       } catch (Exception e) {
-        throw new RuntimeException(e);
+        // Visualizer is not available.
       }
       debug = debugVisualizer;
 
