@@ -6,12 +6,15 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import model.ActionType;
 import model.Building;
@@ -98,6 +101,9 @@ public final class MyStrategy implements Strategy {
     protected Wizard self;
     protected World world;
     protected Game game;
+    Point target = new Point(4000 * 0.2, 4000 * 0.3);
+    Random random = new Random();
+    Point oldPos = new Point(0, 0);
 
     public Brain(Wizard self, World world, Game game) {
       this.self = self;
@@ -274,7 +280,140 @@ public final class MyStrategy implements Strategy {
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
+      long startTime = System.nanoTime();
+
       updateObservers(self, world, game);
+
+      if (true) {
+        if (debug != null) {
+          debug.showText(
+              self.getX(),
+              self.getY(),
+              String.valueOf(self.getRemainingActionCooldownTicks()),
+              Color.black);
+          debug.drawAfterScene();
+        }
+
+        if (target == null
+            || world.getTickIndex() % 200 == 0 && oldPos.getDistanceTo(self) < 15
+            || target.getDistanceTo(self) < self.getRadius()) {
+          System.out.println("new target");
+          while (true) {
+            target =
+                new Point(
+                    self.getX() + (random.nextDouble() * 2 - 1) * 4000,
+                    self.getY() + (random.nextDouble() * 2 - 1) * 4000);
+            if (!field.isSquareBlocked(target)
+                && !(target.getX() < 0
+                    || target.getY() < 0
+                    || target.getX() > 4000
+                    || target.getY() > 4000)) {
+              break;
+            }
+          }
+        }
+
+        if (world.getTickIndex() % 200 == 0) {
+          oldPos = new Point(self);
+        }
+
+        Point walkingTarget = target;
+
+        if (debug != null) {
+          debug.drawLine(self.getX(), self.getY(), target.getX(), target.getY(), Color.blue);
+          debug.drawBeforeScene();
+        }
+
+        List<Square> path = field.findPath(Square.containing(self), Square.containing(target));
+        if (path != null) {
+          if (debug != null) {
+            drawPath(path, Color.pink);
+            debug.drawBeforeScene();
+          }
+
+          int i = 0;
+          while (i + 1 < path.size() && !field.isLineBlocked(path.get(0), path.get(i + 1))) {
+            ++i;
+          }
+
+          walkingTarget = path.get(i).getCenter();
+
+          if (debug != null) {
+            debug.drawLine(
+                self.getX(),
+                self.getY(),
+                path.get(i).getCenterX(),
+                path.get(i).getCenterY(),
+                Color.red);
+            debug.drawAfterScene();
+          }
+        }
+
+        Point selfPoint = new Point(self);
+        Point p1 =
+            Point.fromPolar(game.getStaffRange(), self.getAngle() + game.getStaffSector() / 2)
+                .add(selfPoint);
+        Point p2 = Point.fromPolar(game.getStaffRange(), self.getAngle()).add(selfPoint);
+        Point p3 =
+            Point.fromPolar(game.getStaffRange(), self.getAngle() - game.getStaffSector() / 2)
+                .add(selfPoint);
+        if (debug != null) {
+          debug.fillCircle(p1.getX(), p1.getY(), 2, Color.red);
+          debug.fillCircle(p2.getX(), p2.getY(), 2, Color.red);
+          debug.fillCircle(p3.getX(), p3.getY(), 2, Color.red);
+          debug.drawAfterScene();
+        }
+
+        walker.goTo(walkingTarget, move);
+
+        Tree targetTree =
+            field
+                .getSquaresOnLine(selfPoint, walkingTarget)
+                .map(s -> field.squareToWeakTree.get(s))
+                .filter(t -> t != null)
+                .findFirst()
+                .orElse(null);
+        if (debug != null && targetTree != null) {
+          debug.drawLine(
+              self.getX(), self.getY(), targetTree.getX(), targetTree.getY(), Color.black);
+        }
+        walker.turnTo(targetTree != null ? new Point(targetTree) : walkingTarget, move);
+
+        if (targetTree != null
+            && Math.abs(self.getAngleTo(targetTree)) < game.getStaffSector() / 2
+            && self.getRemainingActionCooldownTicks() == 0) {
+          int[] cooldown = self.getRemainingCooldownTicksByAction();
+
+          if (cooldown[ActionType.STAFF.ordinal()] == 0
+              && (p1.getDistanceTo(targetTree) < targetTree.getRadius()
+                  || p2.getDistanceTo(targetTree) < targetTree.getRadius()
+                  || p3.getDistanceTo(targetTree) < targetTree.getRadius())) {
+            move.setAction(ActionType.STAFF);
+          } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0) {
+            double distance = self.getDistanceTo(targetTree);
+            if (distance <= self.getCastRange()) {
+              double angle = self.getAngleTo(targetTree);
+              if (StrictMath.abs(angle) < game.getStaffSector() / 2) {
+                move.setAction(ActionType.MAGIC_MISSILE);
+                move.setCastAngle(angle);
+                move.setMinCastDistance(
+                    distance - targetTree.getRadius() + game.getMagicMissileRadius());
+              }
+            }
+          }
+        }
+
+        if (debug != null) {
+          for (LivingUnit unit : field.getAllObstacles()) {
+            debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
+          }
+          debug.drawAfterScene();
+          debug.sync();
+        }
+
+        System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000);
+        return;
+      }
 
       if (world.getTickIndex() < IDLE_TICKS) {
         move.setTurn(2 * Math.PI / IDLE_TICKS);
@@ -309,14 +448,6 @@ public final class MyStrategy implements Strategy {
       Point walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
-
-      List<Square> path =
-          field.findPath(
-              Square.containing(new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7)),
-              Square.containing(self));
-      if (path != null) {
-        drawPath(path, Color.pink);
-      }
 
       if (shootingTarget != null) {
         double distance = self.getDistanceTo(shootingTarget);
@@ -419,6 +550,7 @@ public final class MyStrategy implements Strategy {
 
         debug.sync();
       }
+      System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000);
     }
 
     private void updateObservers(Wizard self, World world, Game game) {
@@ -609,6 +741,7 @@ public final class MyStrategy implements Strategy {
 
     private final Point[] waypoints;
     private Set<Square> blockedSquares = new HashSet<>();
+    private Map<Square, Tree> squareToWeakTree = new HashMap<>();
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
@@ -633,6 +766,7 @@ public final class MyStrategy implements Strategy {
     @Override
     public void update() {
       updateBlockedSquares();
+      updateWeakTrees();
 
       if (debug != null) {
         for (int i = 0; i < waypoints.length; ++i) {
@@ -650,22 +784,22 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    private void updateWeakTrees() {
+      squareToWeakTree.clear();
+      for (Tree tree : world.getTrees()) {
+        if (tree.getLife() <= game.getMagicMissileDirectDamage()) {
+          for (Square square : getSquaresBlockedBy(tree)) {
+            squareToWeakTree.put(square, tree);
+          }
+        }
+      }
+    }
+
     private void updateBlockedSquares() {
       blockedSquares.clear();
       for (LivingUnit unit : getAllObstacles()) {
-        if (unit.getLife() <= game.getMagicMissileDirectDamage()) {
-          continue;
-        }
-        double r = unit.getRadius() + self.getRadius() * 1.1;
-        Square topLeft = Square.containing(unit.getX() - r, unit.getY() - r);
-        Square bottomRight = Square.containing(unit.getX() + r, unit.getY() + r);
-        for (int p = topLeft.getP(); p <= bottomRight.getP(); ++p) {
-          for (int q = topLeft.getQ(); q <= bottomRight.getQ(); ++q) {
-            Square square = new Square(p, q);
-            if (unit.getDistanceTo(square.getCenterX(), square.getCenterY()) < r) {
-              blockedSquares.add(square);
-            }
-          }
+        if (unit.getLife() > game.getMagicMissileDirectDamage()) {
+          blockedSquares.addAll(getSquaresBlockedBy(unit));
         }
       }
       blockedSquares.remove(Square.containing(self));
@@ -683,8 +817,46 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    private List<Square> getSquaresBlockedBy(LivingUnit unit) {
+      List<Square> result = new ArrayList<>();
+      double r = unit.getRadius() + SQUARE_CRUDENESS / 2 * 1.5 + self.getRadius();
+      Square topLeft = Square.containing(unit.getX() - r, unit.getY() - r);
+      Square bottomRight = Square.containing(unit.getX() + r, unit.getY() + r);
+      for (int p = topLeft.getP(); p <= bottomRight.getP(); ++p) {
+        for (int q = topLeft.getQ(); q <= bottomRight.getQ(); ++q) {
+          Square square = new Square(p, q);
+          if (unit.getDistanceTo(square.getCenterX(), square.getCenterY()) < r) {
+            result.add(square);
+          }
+        }
+      }
+      return result;
+    }
+
     public boolean isSquareBlocked(Square square) {
       return blockedSquares.contains(square);
+    }
+
+    public boolean isSquareBlocked(Point point) {
+      return blockedSquares.contains(Square.containing(point));
+    }
+
+    public boolean isLineBlocked(Square a, Square b) {
+      return isLineBlocked(a.getCenter(), b.getCenter());
+    }
+
+    public boolean isLineBlocked(Point a, Point b) {
+      return getSquaresOnLine(a, b).anyMatch(s -> isSquareBlocked(s));
+    }
+
+    public Stream<Point> getPointsOnLine(Point a, Point b) {
+      Point ab = b.sub(a);
+      int n = (int) Math.ceil(ab.length() / SQUARE_CRUDENESS) + 1;
+      return IntStream.rangeClosed(0, n).mapToObj(i -> a.add(ab.mul((double) i / n)));
+    }
+
+    public Stream<Square> getSquaresOnLine(Point a, Point b) {
+      return getPointsOnLine(a, b).map(p -> Square.containing(p));
     }
 
     public Point getNextWaypoint() {
@@ -741,7 +913,7 @@ public final class MyStrategy implements Strategy {
       distanceGuess.put(start, 0);
       queue.add(start);
 
-      final int MAX_STEPS = 100;
+      final int MAX_STEPS = 10000;
       for (int i = 0; !queue.isEmpty() && i < MAX_STEPS; ++i) {
         Square point = queue.first();
         queue.remove(point);
@@ -775,7 +947,7 @@ public final class MyStrategy implements Strategy {
         path.add(point);
       }
       Collections.reverse(path);
-      return !path.isEmpty() ? path : null;
+      return path.size() != 1 ? path : null;
     }
 
     private Square[] getNeighbors(Square square) {
@@ -857,6 +1029,7 @@ public final class MyStrategy implements Strategy {
       final int T = 8; // Look-ahead ticks.
       final int N = 4; // Alternatives to consider.
 
+      /*
       if (debug != null) {
         for (int i = 1; i <= N * 2; ++i) {
           int j = i / 2;
@@ -884,6 +1057,7 @@ public final class MyStrategy implements Strategy {
           break;
         }
       }
+      */
 
       move.setSpeed(aSign * v.project(a));
       move.setStrafeSpeed(bSign * v.project(b));
@@ -1060,6 +1234,24 @@ public final class MyStrategy implements Strategy {
       return first.sub(base).isClockwiseTo(second.sub(base));
     }
 
+    public static double getAngle(Point base, Point a, Point b) {
+      return getAngle(a.sub(base), b.sub(base));
+    }
+
+    public static double getAngle(Point a, Point b) {
+      double angle = b.getAngle() - a.getAngle();
+
+      while (angle > Math.PI) {
+        angle -= 2.0D * Math.PI;
+      }
+
+      while (angle < -Math.PI) {
+        angle += 2.0D * Math.PI;
+      }
+
+      return angle;
+    }
+
     @Override
     public String toString() {
       return "Point{" + x + ", " + y + '}';
@@ -1131,6 +1323,10 @@ public final class MyStrategy implements Strategy {
       double cos = Math.cos(angle);
       return new Point(x * cos - y * sin, y * cos + x * sin);
     }
+
+    public double getAngle() {
+      return Math.atan2(y, x);
+    }
   }
 
   private static class Square {
@@ -1190,6 +1386,10 @@ public final class MyStrategy implements Strategy {
 
     public double getCenterY() {
       return (q + 0.5) * SQUARE_CRUDENESS;
+    }
+
+    public Point getCenter() {
+      return new Point(getCenterX(), getCenterY());
     }
 
     public double getLeftX() {
