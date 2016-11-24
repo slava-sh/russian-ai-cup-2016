@@ -22,6 +22,8 @@ import model.World;
 
 public final class MyStrategy implements Strategy {
 
+  private static final int SQUARE_CRUDENESS = 30;
+
   private Brain brain;
 
   private static double binarySearch(double a, double b, Predicate<Double> p) {
@@ -269,6 +271,9 @@ public final class MyStrategy implements Strategy {
 
       if (world.getTickIndex() < IDLE_TICKS) {
         move.setTurn(2 * Math.PI / IDLE_TICKS);
+        if (debug != null) {
+          debug.sync();
+        }
         return;
       }
 
@@ -624,6 +629,37 @@ public final class MyStrategy implements Strategy {
           }
         }
         debug.drawBeforeScene();
+
+        List<Square> blockedSquares = new ArrayList<>();
+        getAllObstacles()
+            .forEach(
+                unit -> {
+                  Square corner1 =
+                      Square.containing(
+                          unit.getX() - unit.getRadius(), unit.getY() - unit.getRadius());
+                  Square corner2 =
+                      Square.containing(
+                          unit.getX() + unit.getRadius(), unit.getY() + unit.getRadius());
+                  for (int p = corner1.getP(); p <= corner2.getP(); ++p) {
+                    for (int q = corner1.getQ(); q <= corner2.getQ(); ++q) {
+                      Square square = new Square(p, q);
+                      if (unit.getDistanceTo(square.getCenterX(), square.getCenterY())
+                          < unit.getRadius() + SQUARE_CRUDENESS / 2) {
+                        blockedSquares.add(square);
+                      }
+                    }
+                  }
+                });
+        blockedSquares.forEach(
+            square -> {
+              debug.fillRect(
+                  square.getLeftX(),
+                  square.getTopY(),
+                  square.getRightX(),
+                  square.getBottomY(),
+                  Color.pink);
+              debug.drawBeforeScene();
+            });
       }
     }
 
@@ -823,7 +859,6 @@ public final class MyStrategy implements Strategy {
                           * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
           for (int i = 0; i < box.size(); ++i) {
             int j = (i + 1) % box.size();
-            // debug.fillCircle(box.get(i).getX(), box.get(i).getY(), 5, Color.blue);
             debug.drawLine(
                 box.get(i).getX(),
                 box.get(i).getY(),
@@ -833,33 +868,6 @@ public final class MyStrategy implements Strategy {
           }
         }
 
-        //debug.drawLine(
-        //    self.getX(),
-        //    self.getY(),
-        //    self.getX() + T * a.getX(),
-        //    self.getY() + T * a.getY(),
-        //    Color.magenta);
-        //debug.drawLine(
-        //    self.getX(),
-        //    self.getY(),
-        //    self.getX() + T * b.getX(),
-        //    self.getY() + T * b.getY(),
-        //    Color.cyan);
-        //debug.drawLine(
-        //    self.getX(),
-        //    self.getY(),
-        //    self.getX() + T * v.getX(),
-        //    self.getY() + T * v.getY(),
-        //    Color.red);
-        //debug.fillCircle(
-        //    self.getX()
-        //        + T * move.getSpeed() * Math.cos(self.getAngle())
-        //        + T * move.getStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
-        //    self.getY()
-        //        + T * move.getSpeed() * Math.sin(self.getAngle())
-        //        + T * move.getStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2),
-        //    5,
-        //    Color.orange);
         debug.drawAfterScene();
       }
     }
@@ -1064,17 +1072,31 @@ public final class MyStrategy implements Strategy {
 
   private static class Square {
 
-    private final int centerX;
-    private final int centerY;
+    private final int p;
+    private final int q;
 
-    private Square(int centerX, int centerY) {
-      this.centerX = centerX;
-      this.centerY = centerY;
+    public Square(int p, int q) {
+      this.p = p;
+      this.q = q;
+    }
+
+    public static Square containing(double x, double y) {
+      int centerP = (int) Math.floor(x / SQUARE_CRUDENESS);
+      int centerQ = (int) Math.floor(y / SQUARE_CRUDENESS);
+      return new Square(centerP, centerQ);
+    }
+
+    public static Square containing(Point point) {
+      return Square.containing(point.getX(), point.getY());
+    }
+
+    public static Square containing(Unit unit) {
+      return Square.containing(unit.getX(), unit.getY());
     }
 
     @Override
     public String toString() {
-      return "Square{" + centerX + ", " + centerY + '}';
+      return "Square{" + p + ", " + q + '}';
     }
 
     @Override
@@ -1082,21 +1104,45 @@ public final class MyStrategy implements Strategy {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       Square square = (Square) o;
-      if (centerX != square.centerX) return false;
-      return centerY == square.centerY;
+      if (p != square.p) return false;
+      return q == square.q;
     }
 
     @Override
     public int hashCode() {
-      return centerX * 100000 + centerY;
+      return p * 100000 + q;
     }
 
-    public int getCenterX() {
-      return centerX;
+    public int getP() {
+      return p;
     }
 
-    public int getCenterY() {
-      return centerY;
+    public int getQ() {
+      return q;
+    }
+
+    public double getCenterX() {
+      return (p + 0.5) * SQUARE_CRUDENESS;
+    }
+
+    public double getCenterY() {
+      return (q + 0.5) * SQUARE_CRUDENESS;
+    }
+
+    public double getLeftX() {
+      return p * SQUARE_CRUDENESS;
+    }
+
+    public double getRightX() {
+      return (p + 1) * SQUARE_CRUDENESS;
+    }
+
+    public double getTopY() {
+      return q * SQUARE_CRUDENESS;
+    }
+
+    public double getBottomY() {
+      return (q + 1) * SQUARE_CRUDENESS;
     }
   }
 }
