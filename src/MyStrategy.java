@@ -1,9 +1,7 @@
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -12,7 +10,6 @@ import model.ActionType;
 import model.Building;
 import model.Faction;
 import model.Game;
-import model.LaneType;
 import model.LivingUnit;
 import model.Minion;
 import model.MinionType;
@@ -84,6 +81,7 @@ public final class MyStrategy implements Strategy {
     private final Faction ENEMY_FRACTION;
 
     private final Visualizer debug;
+    private final BonusFinder bonusFinder;
     private final Field field;
     private final Walker walker;
     private final Shooter shooter;
@@ -109,6 +107,7 @@ public final class MyStrategy implements Strategy {
       }
       debug = debugVisualizer;
 
+      bonusFinder = new BonusFinder(this, debug);
       field = new Field(this, debug, self, game);
       walker = new Walker(this, debug);
       shooter = new Shooter(this, debug);
@@ -399,7 +398,7 @@ public final class MyStrategy implements Strategy {
     }
 
     private Point2D maybeGetBonus() {
-      Point2D bonus = field.getBonus();
+      Point2D bonus = bonusFinder.findBonus();
 
       // Restrict bonus chasing area.
       Point2D a1 = new Point2D(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
@@ -496,7 +495,7 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private abstract static class BrainPart {
+  private abstract static class WorldObserver {
 
     protected final Brain brain;
     protected final Visualizer debug;
@@ -504,7 +503,7 @@ public final class MyStrategy implements Strategy {
     protected World world;
     protected Game game;
 
-    public BrainPart(Brain brain, Visualizer debug) {
+    public WorldObserver(Brain brain, Visualizer debug) {
       this.brain = brain;
       this.debug = debug;
     }
@@ -519,63 +518,13 @@ public final class MyStrategy implements Strategy {
     protected void update() {}
   }
 
-  private static class Field extends BrainPart {
+  private static class BonusFinder extends WorldObserver {
 
-    private final Map<LaneType, Point2D[]> waypointsByLane = new EnumMap<>(LaneType.class);
-    Point2D oldPosition;
-    private Point2D bonus = null;
+    private Point2D bonus;
+    private Point2D oldPosition;
 
-    public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
+    public BonusFinder(Brain brain, Visualizer debug) {
       super(brain, debug);
-
-      double mapSize = game.getMapSize();
-
-      waypointsByLane.put(
-          LaneType.MIDDLE,
-          new Point2D[] {
-            new Point2D(100.0D, mapSize - 100.0D),
-            self.getId() == 1 || self.getId() == 2 || self.getId() == 6 || self.getId() == 7
-                ? new Point2D(200.0D, mapSize - 600.0D)
-                : new Point2D(600.0D, mapSize - 200.0D),
-            new Point2D(800.0D, mapSize - 800.0D),
-            new Point2D(mapSize * 0.35, mapSize * 0.65),
-            new Point2D(mapSize * 0.45, mapSize * 0.55),
-            new Point2D(mapSize * 0.55, mapSize * 0.45),
-            new Point2D(mapSize * 0.65, mapSize * 0.35),
-            new Point2D(mapSize - 550.0D, 400.0D)
-          });
-
-      waypointsByLane.put(
-          LaneType.TOP,
-          new Point2D[] {
-            new Point2D(100.0D, mapSize - 100.0D),
-            new Point2D(100.0D, mapSize - 400.0D),
-            new Point2D(200.0D, mapSize - 800.0D),
-            new Point2D(200.0D, mapSize * 0.75D),
-            new Point2D(200.0D, mapSize * 0.5D),
-            new Point2D(200.0D, mapSize * 0.25D),
-            new Point2D(200.0D, 200.0D),
-            new Point2D(mapSize * 0.25D, 200.0D),
-            new Point2D(mapSize * 0.5D, 200.0D),
-            new Point2D(mapSize * 0.75D, 200.0D),
-            new Point2D(mapSize - 200.0D, 200.0D)
-          });
-
-      waypointsByLane.put(
-          LaneType.BOTTOM,
-          new Point2D[] {
-            new Point2D(100.0D, mapSize - 100.0D),
-            new Point2D(400.0D, mapSize - 100.0D),
-            new Point2D(800.0D, mapSize - 200.0D),
-            new Point2D(mapSize * 0.25D, mapSize - 200.0D),
-            new Point2D(mapSize * 0.5D, mapSize - 200.0D),
-            new Point2D(mapSize * 0.75D, mapSize - 200.0D),
-            new Point2D(mapSize - 200.0D, mapSize - 200.0D),
-            new Point2D(mapSize - 200.0D, mapSize * 0.75D),
-            new Point2D(mapSize - 200.0D, mapSize * 0.5D),
-            new Point2D(mapSize - 200.0D, mapSize * 0.25D),
-            new Point2D(mapSize - 200.0D, 200.0D)
-          });
     }
 
     @Override
@@ -618,31 +567,56 @@ public final class MyStrategy implements Strategy {
           bonus = null;
         }
       }
+    }
 
+    public Point2D findBonus() {
+      return bonus;
+    }
+  }
+
+  private static class Field extends WorldObserver {
+
+    private final Point2D[] waypoints;
+
+    public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
+      super(brain, debug);
+
+      double mapSize = game.getMapSize();
+
+      waypoints =
+          new Point2D[] {
+            new Point2D(100.0D, mapSize - 100.0D),
+            self.getId() == 1 || self.getId() == 2 || self.getId() == 6 || self.getId() == 7
+                ? new Point2D(200.0D, mapSize - 600.0D)
+                : new Point2D(600.0D, mapSize - 200.0D),
+            new Point2D(800.0D, mapSize - 800.0D),
+            new Point2D(mapSize * 0.35, mapSize * 0.65),
+            new Point2D(mapSize * 0.45, mapSize * 0.55),
+            new Point2D(mapSize * 0.55, mapSize * 0.45),
+            new Point2D(mapSize * 0.65, mapSize * 0.35),
+            new Point2D(mapSize - 550.0D, 400.0D)
+          };
+    }
+
+    @Override
+    public void update() {
       if (debug != null) {
-        for (Point2D[] waypoints : waypointsByLane.values()) {
-          for (int i = 0; i < waypoints.length; ++i) {
-            debug.fillCircle(waypoints[i].getX(), waypoints[i].getY(), 5, Color.lightGray);
-            if (i != 0) {
-              debug.drawLine(
-                  waypoints[i - 1].getX(),
-                  waypoints[i - 1].getY(),
-                  waypoints[i].getX(),
-                  waypoints[i].getY(),
-                  Color.lightGray);
-            }
+        for (int i = 0; i < waypoints.length; ++i) {
+          debug.fillCircle(waypoints[i].getX(), waypoints[i].getY(), 5, Color.lightGray);
+          if (i != 0) {
+            debug.drawLine(
+                waypoints[i - 1].getX(),
+                waypoints[i - 1].getY(),
+                waypoints[i].getX(),
+                waypoints[i].getY(),
+                Color.lightGray);
           }
         }
         debug.drawBeforeScene();
       }
     }
 
-    public Point2D getBonus() {
-      return bonus;
-    }
-
     public Point2D getNextWaypoint() {
-      Point2D[] waypoints = waypointsByLane.get(LaneType.MIDDLE);
       int lastWaypointIndex = waypoints.length - 1;
       Point2D lastWaypoint = waypoints[lastWaypointIndex];
 
@@ -662,7 +636,6 @@ public final class MyStrategy implements Strategy {
     }
 
     public Point2D getPreviousWaypoint() {
-      Point2D[] waypoints = waypointsByLane.get(LaneType.MIDDLE);
       Point2D firstWaypoint = waypoints[0];
 
       for (int waypointIndex = waypoints.length - 1; waypointIndex > 0; --waypointIndex) {
@@ -726,7 +699,7 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private static class Walker extends BrainPart {
+  private static class Walker extends WorldObserver {
 
     public Walker(Brain brain, Visualizer debug) {
       super(brain, debug);
@@ -894,7 +867,7 @@ public final class MyStrategy implements Strategy {
     }
   }
 
-  private static class Shooter extends BrainPart {
+  private static class Shooter extends WorldObserver {
 
     public Shooter(Brain brain, Visualizer debug) {
       super(brain, debug);
