@@ -384,38 +384,47 @@ public final class MyStrategy implements Strategy {
 
         if (walkingTarget != null) {
           debug.fillCircle(walkingTarget.getX(), walkingTarget.getY(), 5, Color.blue);
+          debug.drawBeforeScene();
         }
 
         if (shootingTarget != null) {
           debug.fillCircle(shootingTarget.getX(), shootingTarget.getY(), 5, Color.red);
           debug.drawLine(
               self.getX(), self.getY(), shootingTarget.getX(), shootingTarget.getY(), Color.red);
+          debug.drawBeforeScene();
         }
 
         for (Building building : world.getBuildings()) {
           debug.drawCircle(
               building.getX(), building.getY(), building.getVisionRange(), Color.lightGray);
           debug.drawCircle(building.getX(), building.getY(), building.getAttackRange(), Color.pink);
+          debug.drawBeforeScene();
+
           debug.showText(
               building.getX(),
-              building.getY(),
-              " " + building.getRemainingActionCooldownTicks(),
+              building.getY() + 20,
+              String.valueOf(building.getRemainingActionCooldownTicks()),
               Color.black);
+          debug.drawAfterScene();
         }
 
         debug.showText(
-            self.getX(), self.getY(), " " + self.getRemainingActionCooldownTicks(), Color.black);
+            self.getX(),
+            self.getY(),
+            String.valueOf(self.getRemainingActionCooldownTicks()),
+            Color.black);
         debug.showText(
             self.getX(),
             self.getY() + 20,
-            " " + self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()],
+            String.valueOf(
+                self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()]),
             Color.black);
+        debug.drawAfterScene();
 
         for (LivingUnit unit : field.getAllObstacles()) {
-          debug.showText(unit.getX(), unit.getY(), "HP:" + unit.getLife(), Color.black);
+          debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
         }
-
-        debug.drawBeforeScene();
+        debug.drawAfterScene();
 
         debug.sync();
       }
