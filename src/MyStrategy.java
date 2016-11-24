@@ -1,15 +1,9 @@
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -30,8 +24,6 @@ import model.Wizard;
 import model.World;
 
 public final class MyStrategy implements Strategy {
-
-  private static final double LOOKAHEAD_TICKS = 10;
 
   private Brain brain;
 
@@ -298,31 +290,7 @@ public final class MyStrategy implements Strategy {
         debug.drawBeforeScene();
       }
 
-      Point2D bonus = field.getBonus();
-      // Restrict bonus chasing area.
-      Point2D a1 = new Point2D(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
-      Point2D b1 = new Point2D(game.getMapSize() * (1 - 0.1), game.getMapSize() * (1 - 0.2));
-      Point2D a2 = new Point2D(game.getMapSize() * 0.1, game.getMapSize() * 0.2);
-      Point2D b2 = new Point2D(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
-      Point2D center = new Point2D(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
-      Point2D pself = new Point2D(self);
-      double BONUS_CHASE_RADIUS = 300;
-      if (debug != null) {
-        debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
-        debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
-        debug.drawCircle(center.getX(), center.getY(), BONUS_CHASE_RADIUS, Color.lightGray);
-        debug.drawBeforeScene();
-      }
-      if (bonus != null
-          && center.getDistanceTo(self) > BONUS_CHASE_RADIUS
-          && Point2D.isClockwise(a1, b1, pself) == Point2D.isClockwise(a2, b2, pself)) {
-        bonus = null;
-      }
-      if (debug != null && bonus != null) {
-        debug.fillCircle(self.getX(), self.getY(), 10, Color.green);
-        debug.drawAfterScene();
-      }
-
+      Point2D bonus = maybeGetBonus();
       Point2D walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
@@ -430,6 +398,39 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    private Point2D maybeGetBonus() {
+      Point2D bonus = field.getBonus();
+
+      // Restrict bonus chasing area.
+      Point2D a1 = new Point2D(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
+      Point2D b1 = new Point2D(game.getMapSize() * (1 - 0.1), game.getMapSize() * (1 - 0.2));
+      Point2D a2 = new Point2D(game.getMapSize() * 0.1, game.getMapSize() * 0.2);
+      Point2D b2 = new Point2D(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
+      Point2D center = new Point2D(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
+
+      double BONUS_CHASE_RADIUS = 300;
+      Point2D selfPoint = new Point2D(self);
+      if (bonus != null
+          && center.getDistanceTo(self) > BONUS_CHASE_RADIUS
+          && Point2D.isClockwise(a1, b1, selfPoint) == Point2D.isClockwise(a2, b2, selfPoint)) {
+        bonus = null;
+      }
+
+      if (debug != null) {
+        debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
+        debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
+        debug.drawCircle(center.getX(), center.getY(), BONUS_CHASE_RADIUS, Color.lightGray);
+        debug.drawBeforeScene();
+
+        if (bonus != null) {
+          debug.fillCircle(self.getX(), self.getY(), 10, Color.green);
+          debug.drawAfterScene();
+        }
+      }
+
+      return bonus;
+    }
+
     private double getMinionAttackRange(Minion m) {
       return m.getType() == MinionType.FETISH_BLOWDART
           ? game.getFetishBlowdartAttackRange()
@@ -458,7 +459,6 @@ public final class MyStrategy implements Strategy {
     }
 
     Point2D predictPosition(Unit unit, double ticksFromNow) {
-      // TODO: Figure out where the minus sign comes from.
       return new Point2D(
           unit.getX() + unit.getSpeedX() * ticksFromNow,
           unit.getY() + unit.getSpeedY() * ticksFromNow);
@@ -472,26 +472,13 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    void drawPath(List<FieldPoint> path, Color color) {
+    void drawPath(List<Point2D> path, Color color) {
       for (int i = 1; i < path.size(); ++i) {
         debug.drawLine(
             path.get(i - 1).getX(),
             path.get(i - 1).getY(),
             path.get(i).getX(),
             path.get(i).getY(),
-            color);
-      }
-    }
-
-    void drawHexTile(FieldPoint point, Color color) {
-      List<FieldPoint> points = point.getNeighbors();
-      for (int i = 0; i < points.size(); ++i) {
-        int j = (i + 1) % points.size();
-        debug.drawLine(
-            points.get(i).getX(),
-            points.get(i).getY(),
-            points.get(j).getX(),
-            points.get(j).getY(),
             color);
       }
     }
@@ -534,26 +521,12 @@ public final class MyStrategy implements Strategy {
 
   private static class Field extends BrainPart {
 
-    private static final List<HexPoint> HEX_DIRECTIONS =
-        Collections.unmodifiableList(
-            Arrays.asList(
-                new HexPoint(1, 0),
-                new HexPoint(1, -1),
-                new HexPoint(0, -1),
-                new HexPoint(-1, 0),
-                new HexPoint(-1, 1),
-                new HexPoint(0, 1)));
-    private static final double REACHABILITY_EPS = 3;
-
-    private final double HEXAGON_SIZE;
     private final Map<LaneType, Point2D[]> waypointsByLane = new EnumMap<>(LaneType.class);
     Point2D oldPosition;
-    private Map<HexPoint, FieldPoint> hexToPoint;
     private Point2D bonus = null;
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
-      HEXAGON_SIZE = self.getRadius();
 
       double mapSize = game.getMapSize();
 
@@ -707,29 +680,7 @@ public final class MyStrategy implements Strategy {
       return firstWaypoint;
     }
 
-    public void oldUpdate() {
-      if (hexToPoint == null) {
-        hexToPoint = createHexToPoint();
-      }
-      hexToPoint
-          .values()
-          .forEach(
-              point -> {
-                if (point.getDistanceTo(self) < self.getVisionRange()) {
-                  updatePoint(point);
-                }
-              });
-    }
-
-    public Collection<FieldPoint> getPoints() {
-      return hexToPoint.values();
-    }
-
-    public FieldPoint getClosestPoint(double x, double y) {
-      // TODO: Handle the case when the hex point is not in the map.
-      return hexToPoint.get(pixelToHex(x, y));
-    }
-
+    /*
     public List<FieldPoint> findPath(FieldPoint start, FieldPoint end) {
       // Breadth-first search.
       Map<FieldPoint, FieldPoint> prev = new IdentityHashMap<>();
@@ -762,184 +713,7 @@ public final class MyStrategy implements Strategy {
       Collections.reverse(path);
       return path;
     }
-
-    private void updatePoint(FieldPoint point) {
-      double score = 0;
-      double enemy_factor = 0;
-      boolean isReachable = true;
-
-      double max_sum = world.getHeight() + world.getWidth();
-      score += (StrictMath.round(world.getHeight() - point.getY()) + point.getX()) / max_sum * 50;
-
-      for (Wizard wizard : world.getWizards()) {
-        if (wizard.isMe()) {
-          continue;
-        }
-
-        double distance = point.getDistanceTo(brain.predictPosition(wizard, LOOKAHEAD_TICKS));
-
-        if (distance < self.getRadius() + wizard.getRadius() + REACHABILITY_EPS) {
-          isReachable = false;
-        }
-
-        if (brain.isAlly(wizard)) {
-          if (wizard.isMaster() && distance < wizard.getVisionRange() / 3) {
-            double MASTER_VISION_RANGE_FACTOR = 20;
-            score += MASTER_VISION_RANGE_FACTOR;
-          }
-
-          if (distance < wizard.getCastRange()) {
-            if (StrictMath.abs(wizard.getAngleTo(point.getX(), point.getY())) < StrictMath.PI / 4) {
-              // TODO: Discount for rotation time.
-              double ALLY_WIZARD_CAST_RANGE_FACTOR = 15;
-              score += ALLY_WIZARD_CAST_RANGE_FACTOR;
-            }
-          }
-
-          if (distance < wizard.getRadius() + 1.5 * self.getRadius()) {
-            double TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR = -10;
-            score += TIGHT_CLOSE_TO_ALLY_WIZARD_FACTOR;
-          }
-        } else {
-          if (distance < wizard.getCastRange()) {
-            double ENEMY_WIZARD_CAST_RANGE_FACTOR = -5;
-            enemy_factor += ENEMY_WIZARD_CAST_RANGE_FACTOR;
-          }
-        }
-      }
-
-      for (Minion minion : world.getMinions()) {
-        double distance = point.getDistanceTo(brain.predictPosition(minion, LOOKAHEAD_TICKS));
-
-        if (distance < self.getRadius() + minion.getRadius() + REACHABILITY_EPS) {
-          isReachable = false;
-        }
-
-        double angle = minion.getAngleTo(point.getX(), point.getY());
-
-        if (brain.isAlly(minion)) {
-          if (minion.getType() == MinionType.ORC_WOODCUTTER && distance < minion.getVisionRange()) {
-            // TODO: Discount for rotation time.
-            double ALLY_WOODCUTTER_VISION_RANGE_FACTOR = 3;
-            score += ALLY_WOODCUTTER_VISION_RANGE_FACTOR;
-          }
-
-          if (minion.getType() == MinionType.FETISH_BLOWDART
-              && distance < minion.getVisionRange()) {
-            //if (StrictMath.abs(angle) < game.getFetishBlowdartAttackSector() / 2 * 2) {
-            // TODO: Discount for rotation time.
-            double ALLY_FETISH_VISION_RANGE_FACTOR = 5;
-            score += ALLY_FETISH_VISION_RANGE_FACTOR;
-          }
-        } else {
-          if (minion.getType() == MinionType.ORC_WOODCUTTER && distance < minion.getVisionRange()) {
-            // TODO: Discount for rotation time.
-            double ENEMY_WOODCUTTER_VISION_RANGE_FACTOR = -1;
-            enemy_factor += ENEMY_WOODCUTTER_VISION_RANGE_FACTOR;
-          }
-
-          if (minion.getType() == MinionType.FETISH_BLOWDART
-              && distance < minion.getVisionRange()) {
-            //if (StrictMath.abs(angle) < game.getFetishBlowdartAttackSector() / 2 * 2) {
-            // TODO: Discount for rotation time.
-            double ENEMY_FETISH_VISION_RANGE_FACTOR = -2;
-            enemy_factor += ENEMY_FETISH_VISION_RANGE_FACTOR;
-          }
-        }
-      }
-
-      for (Building building : world.getBuildings()) {
-        double distance = point.getDistanceTo(building);
-        if (distance < self.getRadius() + building.getRadius() + REACHABILITY_EPS) {
-          isReachable = false;
-        }
-        if (brain.isAlly(building)) {
-          if (distance < building.getVisionRange()) {
-            double ALLY_BUILDING_VISION_RANGE_FACTOR = 0;
-            score += ALLY_BUILDING_VISION_RANGE_FACTOR;
-          }
-        } else {
-          if (distance < building.getVisionRange()) {
-            double ENEMY_BUILDING_VISION_RANGE_FACTOR = -5;
-            enemy_factor += ENEMY_BUILDING_VISION_RANGE_FACTOR;
-          }
-        }
-      }
-
-      for (Tree tree : world.getTrees()) {
-        if (point.getDistanceTo(tree) < self.getRadius() + tree.getRadius() + REACHABILITY_EPS) {
-          isReachable = false;
-        }
-        if (point.getDistanceTo(tree) < HEXAGON_SIZE * 3) {
-          double CLOSE_TO_TREE_FACTOR = -3;
-          score += CLOSE_TO_TREE_FACTOR;
-        }
-      }
-
-      enemy_factor *= 1 + (1 - self.getLife() / self.getMaxLife());
-      score += enemy_factor;
-
-      point.setScore(score);
-      point.setReachable(isReachable);
-    }
-
-    private Point2D hexToPixel(double q, double r) {
-      double x = HEXAGON_SIZE * 3 / 2 * q;
-      double y = HEXAGON_SIZE * StrictMath.sqrt(3) * (r + q / 2);
-      return new Point2D(x, y);
-    }
-
-    private HexPoint pixelToHex(double x, double y) {
-      double q = x * 2 / 3 / HEXAGON_SIZE;
-      double r = (-x / 3 + StrictMath.sqrt(3) / 3 * y) / HEXAGON_SIZE;
-      double s = -q - r;
-      int rx = (int) StrictMath.round(q);
-      int ry = (int) StrictMath.round(r);
-      int rz = (int) StrictMath.round(s);
-      double x_diff = StrictMath.abs(rx - q);
-      double y_diff = StrictMath.abs(ry - r);
-      double z_diff = StrictMath.abs(rz - s);
-      if (x_diff > y_diff && x_diff > z_diff) {
-        rx = -ry - rz;
-      } else if (y_diff > z_diff) {
-        ry = -rx - rz;
-      }
-      return new HexPoint(rx, ry);
-    }
-
-    private Map<HexPoint, FieldPoint> createHexToPoint() {
-      Map<HexPoint, FieldPoint> map = new HashMap<>();
-      double radius = self.getRadius();
-      for (int q = -100; q <= 100; ++q) {
-        for (int r = -100; r <= 100; ++r) {
-          Point2D point = hexToPixel(q, r);
-          if (radius < point.getX()
-              && point.getX() < world.getWidth() - radius
-              && radius < point.getY()
-              && point.getY() < world.getHeight() - radius) {
-            map.put(pixelToHex(point.getX(), point.getY()), new FieldPoint(point));
-          }
-        }
-      }
-
-      for (Map.Entry<HexPoint, FieldPoint> entry : map.entrySet()) {
-        int q = entry.getKey().getQ();
-        int r = entry.getKey().getR();
-        FieldPoint point = entry.getValue();
-
-        List<FieldPoint> neighbors = new ArrayList<>();
-        for (HexPoint delta : HEX_DIRECTIONS) {
-          FieldPoint neighbor = map.get(new HexPoint(q + delta.q, r + delta.r));
-          if (neighbor == null) {
-            continue;
-          }
-          neighbors.add(neighbor);
-        }
-        point.setNeighbors(neighbors);
-      }
-
-      return Collections.unmodifiableMap(map);
-    }
+    */
 
     List<LivingUnit> getAllObstacles() {
       List<LivingUnit> units = new ArrayList<>();
@@ -953,10 +727,6 @@ public final class MyStrategy implements Strategy {
   }
 
   private static class Walker extends BrainPart {
-
-    private static final double RETARGET_THRESHOLD = 1;
-
-    private FieldPoint target;
 
     public Walker(Brain brain, Visualizer debug) {
       super(brain, debug);
@@ -1305,80 +1075,6 @@ public final class MyStrategy implements Strategy {
       double sin = Math.sin(angle);
       double cos = Math.cos(angle);
       return new Point2D(x * cos - y * sin, y * cos + x * sin);
-    }
-  }
-
-  private static class FieldPoint extends Point2D {
-
-    private List<FieldPoint> neighbors;
-    private boolean isReachable;
-    private double score;
-
-    public FieldPoint(Point2D point) {
-      super(point.getX(), point.getY());
-    }
-
-    public List<FieldPoint> getNeighbors() {
-      return neighbors;
-    }
-
-    public void setNeighbors(List<FieldPoint> neighbors) {
-      if (this.neighbors != null) {
-        throw new AssertionError("neighbors are already set.");
-      }
-      this.neighbors = Collections.unmodifiableList(neighbors);
-    }
-
-    public boolean isReachable() {
-      return isReachable;
-    }
-
-    public void setReachable(boolean reachable) {
-      isReachable = reachable;
-    }
-
-    public double getScore() {
-      return score;
-    }
-
-    public void setScore(double score) {
-      this.score = score;
-    }
-  }
-
-  private static class HexPoint {
-
-    private final int q;
-    private final int r;
-
-    public HexPoint(int q, int r) {
-      this.q = q;
-      this.r = r;
-    }
-
-    public int getQ() {
-      return q;
-    }
-
-    public int getR() {
-      return r;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
-
-      HexPoint hexPoint = (HexPoint) o;
-
-      return q == hexPoint.q && r == hexPoint.r;
-    }
-
-    @Override
-    public int hashCode() {
-      int result = q;
-      result = 31 * result + r;
-      return result;
     }
   }
 }
