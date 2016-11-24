@@ -544,9 +544,7 @@ public final class MyStrategy implements Strategy {
     public void update() {
       if (world.getTickIndex() != 0
           && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
-        Point b1 = new Point(game.getMapSize() * 0.3, game.getMapSize() * 0.3);
-        Point b2 = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
-        bonus = b1.getDistanceTo(self) < b2.getDistanceTo(self) ? b1 : b2;
+        bonus = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
         oldPosition = null;
         if (debug != null) {
           System.out.println("bonus at " + bonus);
