@@ -81,6 +81,7 @@ public final class MyStrategy implements Strategy {
     private final Faction ENEMY_FRACTION;
 
     private final Visualizer debug;
+    private final List<WorldObserver> observers;
     private final BonusFinder bonusFinder;
     private final Field field;
     private final Walker walker;
@@ -107,10 +108,19 @@ public final class MyStrategy implements Strategy {
       }
       debug = debugVisualizer;
 
+      observers = new ArrayList<>();
+
       bonusFinder = new BonusFinder(this, debug);
+      observers.add(bonusFinder);
+
       field = new Field(this, debug, self, game);
+      observers.add(field);
+
       walker = new Walker(this, debug);
+      observers.add(walker);
+
       shooter = new Shooter(this, debug);
+      observers.add(shooter);
 
       if (debug != null) {
         printGameParameters();
@@ -255,13 +265,7 @@ public final class MyStrategy implements Strategy {
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
-      this.self = self;
-      this.world = world;
-      this.game = game;
-
-      field.update(self, world, game);
-      walker.update(self, world, game);
-      shooter.update(self, world, game);
+      updateObservers(self, world, game);
 
       if (world.getTickIndex() < IDLE_TICKS) {
         move.setTurn(2 * Math.PI / IDLE_TICKS);
@@ -394,6 +398,15 @@ public final class MyStrategy implements Strategy {
         debug.drawAfterScene();
 
         debug.sync();
+      }
+    }
+
+    private void updateObservers(Wizard self, World world, Game game) {
+      this.self = self;
+      this.world = world;
+      this.game = game;
+      for (WorldObserver observer : observers) {
+        observer.update(self, world, game);
       }
     }
 
