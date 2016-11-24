@@ -308,7 +308,7 @@ public final class MyStrategy implements Strategy {
       Point2D b2 = new Point2D(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
       Point2D center = new Point2D(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
       Point2D pself = new Point2D(self);
-      double BONUS_CHASE_RADIUS = 600;
+      double BONUS_CHASE_RADIUS = 300;
       if (debug != null) {
         debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
         debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
