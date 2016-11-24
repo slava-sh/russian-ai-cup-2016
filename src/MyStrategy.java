@@ -1,7 +1,14 @@
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -78,7 +85,7 @@ public final class MyStrategy implements Strategy {
 
   private static class Brain {
 
-    private static final int IDLE_TICKS = 125;
+    private static final int IDLE_TICKS = 0; //125;
     private final Faction ALLY_FRACTION;
     private final Faction ENEMY_FRACTION;
 
@@ -303,6 +310,9 @@ public final class MyStrategy implements Strategy {
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
+      List<Square> path = field.findPath(Square.containing(walkingTarget), Square.containing(self));
+      drawPath(path, Color.pink);
+
       if (shootingTarget != null) {
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
@@ -489,13 +499,13 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    void drawPath(List<Point> path, Color color) {
+    void drawPath(List<Square> path, Color color) {
       for (int i = 1; i < path.size(); ++i) {
         debug.drawLine(
-            path.get(i - 1).getX(),
-            path.get(i - 1).getY(),
-            path.get(i).getX(),
-            path.get(i).getY(),
+            path.get(i - 1).getCenterX(),
+            path.get(i - 1).getCenterY(),
+            path.get(i).getCenterX(),
+            path.get(i).getCenterY(),
             color);
       }
     }
@@ -593,6 +603,7 @@ public final class MyStrategy implements Strategy {
   private static class Field extends WorldObserver {
 
     private final Point[] waypoints;
+    private Set<Square> blockedSquares = new HashSet<>();
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
@@ -616,6 +627,8 @@ public final class MyStrategy implements Strategy {
 
     @Override
     public void update() {
+      updateBlockedSquares();
+
       if (debug != null) {
         for (int i = 0; i < waypoints.length; ++i) {
           debug.fillCircle(waypoints[i].getX(), waypoints[i].getY(), 5, Color.lightGray);
@@ -629,38 +642,42 @@ public final class MyStrategy implements Strategy {
           }
         }
         debug.drawBeforeScene();
-
-        List<Square> blockedSquares = new ArrayList<>();
-        getAllObstacles()
-            .forEach(
-                unit -> {
-                  Square corner1 =
-                      Square.containing(
-                          unit.getX() - unit.getRadius(), unit.getY() - unit.getRadius());
-                  Square corner2 =
-                      Square.containing(
-                          unit.getX() + unit.getRadius(), unit.getY() + unit.getRadius());
-                  for (int p = corner1.getP(); p <= corner2.getP(); ++p) {
-                    for (int q = corner1.getQ(); q <= corner2.getQ(); ++q) {
-                      Square square = new Square(p, q);
-                      if (unit.getDistanceTo(square.getCenterX(), square.getCenterY())
-                          < unit.getRadius() + SQUARE_CRUDENESS / 2) {
-                        blockedSquares.add(square);
-                      }
-                    }
-                  }
-                });
-        blockedSquares.forEach(
-            square -> {
-              debug.fillRect(
-                  square.getLeftX(),
-                  square.getTopY(),
-                  square.getRightX(),
-                  square.getBottomY(),
-                  Color.pink);
-              debug.drawBeforeScene();
-            });
       }
+    }
+
+    private void updateBlockedSquares() {
+      blockedSquares.clear();
+      for (LivingUnit unit : getAllObstacles()) {
+        Square topLeft =
+            Square.containing(unit.getX() - unit.getRadius(), unit.getY() - unit.getRadius());
+        Square bottomRight =
+            Square.containing(unit.getX() + unit.getRadius(), unit.getY() + unit.getRadius());
+        for (int p = topLeft.getP(); p <= bottomRight.getP(); ++p) {
+          for (int q = topLeft.getQ(); q <= bottomRight.getQ(); ++q) {
+            Square square = new Square(p, q);
+            if (unit.getDistanceTo(square.getCenterX(), square.getCenterY())
+                < unit.getRadius() + SQUARE_CRUDENESS / 2) {
+              blockedSquares.add(square);
+            }
+          }
+        }
+      }
+
+      if (debug != null) {
+        for (Square square : blockedSquares) {
+          debug.fillRect(
+              square.getLeftX(),
+              square.getTopY(),
+              square.getRightX(),
+              square.getBottomY(),
+              Color.pink);
+          debug.drawBeforeScene();
+        }
+      }
+    }
+
+    public boolean isSquareBlocked(Square square) {
+      return blockedSquares.contains(square);
     }
 
     public Point getNextWaypoint() {
@@ -700,40 +717,90 @@ public final class MyStrategy implements Strategy {
       return firstWaypoint;
     }
 
-    /*
-    public List<FieldPoint> findPath(FieldPoint start, FieldPoint end) {
-      // Breadth-first search.
-      Map<FieldPoint, FieldPoint> prev = new IdentityHashMap<>();
-      prev.put(start, null);
-      Queue<FieldPoint> queue = new LinkedList<>();
+    public List<Square> findPath(Square start, Square end) {
+      if (start == null || end == null) {
+        return null;
+      }
+
+      Map<Square, Square> cameFrom = new HashMap<>();
+      Map<Square, Integer> distance = new HashMap<>();
+      Map<Square, Integer> distanceGuess = new HashMap<>();
+      SortedSet<Square> queue =
+          new TreeSet<>((Square a, Square b) -> distanceGuess.get(a) - distanceGuess.get(b));
+      Set<Square> done = new HashSet<>();
+
+      cameFrom.put(start, null);
+      distance.put(start, 0);
+      distanceGuess.put(start, 0);
       queue.add(start);
-      while (!queue.isEmpty()) {
-        FieldPoint point = queue.poll();
+
+      int i = 0;
+      while (!queue.isEmpty() && i < 300) {
+        i++;
+        Square point = queue.first();
+        queue.remove(point);
+
         if (point.equals(end)) {
           break;
         }
-        for (FieldPoint neighbor : point.getNeighbors()) {
-          if (neighbor.isReachable() && !prev.containsKey(neighbor)) {
-            prev.put(neighbor, point);
-            queue.add(neighbor);
+        done.add(point);
 
-            if (debug != null) {
-              debug.drawLine(
-                  neighbor.getX(), neighbor.getY(), point.getX(), point.getY(), Color.lightGray);
-              debug.drawBeforeScene();
-            }
+        int distanceToPoint = distance.get(point);
+        for (Square neighbor : getNeighbors(point)) {
+          if (isSquareBlocked(neighbor) || done.contains(neighbor)) {
+            continue;
+          }
+
+          Integer oldDistance = distance.get(neighbor);
+          int newDistance = distanceToPoint + squaredDistance(point, neighbor);
+          if (oldDistance == null || newDistance < oldDistance) {
+            int newGuess = newDistance + squaredDistance(neighbor, end);
+            cameFrom.put(neighbor, point);
+            distance.put(neighbor, newDistance);
+            distanceGuess.put(neighbor, newGuess);
+            queue.remove(neighbor);
+            queue.add(neighbor);
+          }
+
+          if (debug != null) {
+            debug.drawLine(
+                point.getCenterX(),
+                point.getCenterY(),
+                neighbor.getCenterX(),
+                neighbor.getCenterY(),
+                Color.lightGray);
+            debug.drawBeforeScene();
           }
         }
       }
 
-      List<FieldPoint> path = new ArrayList<>();
-      for (FieldPoint point = end; point != null; point = prev.get(point)) {
+      List<Square> path = new ArrayList<>();
+      for (Square point = end; point != null; point = cameFrom.get(point)) {
         path.add(point);
       }
       Collections.reverse(path);
       return path;
     }
-    */
+
+    private Square[] getNeighbors(Square square) {
+      int p = square.getP();
+      int q = square.getQ();
+      return new Square[] {
+        new Square(p - 1, q),
+        new Square(p, q - 1),
+        new Square(p + 1, q),
+        new Square(p, q + 1),
+        new Square(p - 1, q - 1),
+        new Square(p + 1, q - 1),
+        new Square(p - 1, q + 1),
+        new Square(p + 1, q + 1),
+      };
+    }
+
+    private int squaredDistance(Square a, Square b) {
+      return (a.getP() - b.getP()) * (a.getP() - b.getP())
+          + (a.getQ() - b.getQ()) * (a.getQ() - b.getQ());
+    }
 
     List<LivingUnit> getAllObstacles() {
       List<LivingUnit> units = new ArrayList<>();
