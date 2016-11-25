@@ -145,7 +145,7 @@ public final class MyStrategy implements Strategy {
       stuck = new Stuck(this, debug, random);
       observers.add(stuck);
 
-      bonusFinder = new BonusFinder(this, debug);
+      bonusFinder = new BonusFinder(this, debug, game);
       observers.add(bonusFinder);
 
       field = new Field(this, debug, self, game);
@@ -711,23 +711,37 @@ public final class MyStrategy implements Strategy {
 
   private static class BonusFinder extends WorldObserver {
 
+    private static final int BONUS_ANTICIPATION_TICKS = 200;
+
+    private int nextBonusTick;
     private Point bonus;
 
-    public BonusFinder(Brain brain, Visualizer debug) {
+    public BonusFinder(Brain brain, Visualizer debug, Game game) {
       super(brain, debug);
+      nextBonusTick = game.getBonusAppearanceIntervalTicks() + 1;
     }
 
     @Override
     public void update() {
-      if (world.getTickIndex() != 0
-          && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
-        bonus = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
+      int tick = world.getTickIndex();
+      if (tick == nextBonusTick - BONUS_ANTICIPATION_TICKS) {
+        bonus =
+            new Point(
+                game.getMapSize() * 0.7 - game.getBonusRadius() - self.getRadius(),
+                game.getMapSize() * 0.7 - game.getBonusRadius() - self.getRadius());
         if (debug != null) {
-          System.out.println("bonus at " + bonus);
+          System.out.println("anticipating a bonus");
         }
       }
 
-      if (bonus != null && bonus.getDistanceTo(self) < self.getVisionRange()) {
+      if (tick == nextBonusTick) {
+        nextBonusTick += game.getBonusAppearanceIntervalTicks();
+        bonus = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
+      }
+
+      if (tick < nextBonusTick - BONUS_ANTICIPATION_TICKS
+          && bonus != null
+          && bonus.getDistanceTo(self) < self.getVisionRange()) {
         boolean bonusExists =
             Arrays.stream(world.getBonuses())
                 .anyMatch(b -> b.getDistanceTo(self) < self.getVisionRange());
