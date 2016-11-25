@@ -429,7 +429,7 @@ public final class MyStrategy implements Strategy {
 
         if (debug != null) {
           if (stuck.state == Stuck.State.STUCK) {
-            debug.showText(self.getX(), self.getY() + 10, "Stuck", Color.red);
+            debug.showText(self.getX() - 20, self.getY() + 20, "Stuck", Color.black);
             debug.drawAfterScene();
           }
         }
@@ -708,8 +708,7 @@ public final class MyStrategy implements Strategy {
 
   private static class Stuck extends WorldObserver {
 
-    private static final int STUCK_DETECTION_TICKS = 10;
-    private static final double STUCK_DISTANCE = 10;
+    private static final int STUCK_DETECTION_TICKS = 2;
     private static final double SPEED_EPS = 0.01;
     private static final double MIN_WALKING_SPEED = 1;
 
@@ -762,12 +761,6 @@ public final class MyStrategy implements Strategy {
         state = State.STUCK;
       } else {
         state = speed.length() > MIN_WALKING_SPEED ? State.WALKING : State.STANDING;
-        if (state == State.WALKING) {
-          Point oldPosition = positionHistory.get(STUCK_DETECTION_TICKS - 1);
-          if (oldPosition.getDistanceTo(position) < STUCK_DISTANCE) {
-            state = State.STUCK;
-          }
-        }
       }
     }
 
@@ -920,7 +913,7 @@ public final class MyStrategy implements Strategy {
 
     private List<Square> getSquaresBlockedBy(LivingUnit unit) {
       List<Square> result = new ArrayList<>();
-      double r = unit.getRadius() + SQUARE_CRUDENESS / 2 * 1.5 + self.getRadius();
+      double r = unit.getRadius() + self.getRadius();
       Square topLeft = Square.containing(unit.getX() - r, unit.getY() - r);
       Square bottomRight = Square.containing(unit.getX() + r, unit.getY() + r);
       for (int p = topLeft.getP(); p <= bottomRight.getP(); ++p) {
