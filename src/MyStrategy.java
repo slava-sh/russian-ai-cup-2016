@@ -742,6 +742,13 @@ public final class MyStrategy implements Strategy {
     private final Point[] waypoints;
     private Set<Square> blockedSquares = new HashSet<>();
     private Map<Square, Tree> squareToWeakTree = new HashMap<>();
+    private Square pathTarget;
+    private Map<Square, Square> cameFrom = new HashMap<>();
+    private Map<Square, Integer> distance = new HashMap<>();
+    private Map<Square, Integer> distanceGuess = new HashMap<>();
+    private SortedSet<Square> queue =
+        new TreeSet<>((Square a, Square b) -> distanceGuess.get(a) - distanceGuess.get(b));
+    private Set<Square> done = new HashSet<>();
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
@@ -896,58 +903,101 @@ public final class MyStrategy implements Strategy {
       return firstWaypoint;
     }
 
-    public List<Square> findPath(Square start, Square end) {
-      if (start == null || end == null) {
+    public void setPathTarget(Square target) {
+      if (Objects.equals(pathTarget, target)) {
+        return;
+      }
+
+      this.pathTarget = target;
+
+      cameFrom.clear();
+      cameFrom.put(pathTarget, null);
+
+      distance.clear();
+      distance.put(pathTarget, 0);
+
+      distanceGuess.clear();
+      distanceGuess.put(pathTarget, 0);
+
+      queue.clear();
+      queue.add(pathTarget);
+    }
+
+    public List<Square> findPath(Square start) {
+      if (pathTarget == null || start == null) {
         return null;
       }
 
-      Map<Square, Square> cameFrom = new HashMap<>();
-      Map<Square, Integer> distance = new HashMap<>();
-      Map<Square, Integer> distanceGuess = new HashMap<>();
-      SortedSet<Square> queue =
-          new TreeSet<>((Square a, Square b) -> distanceGuess.get(a) - distanceGuess.get(b));
-      Set<Square> done = new HashSet<>();
+      if (!done.contains(start)) {
+        final int MAX_STEPS = 10000;
+        for (int i = 0; !queue.isEmpty() && i < MAX_STEPS; ++i) {
+          Square square = queue.first();
+          queue.remove(square);
+          done.add(square);
 
-      cameFrom.put(start, null);
-      distance.put(start, 0);
-      distanceGuess.put(start, 0);
-      queue.add(start);
-
-      final int MAX_STEPS = 10000;
-      for (int i = 0; !queue.isEmpty() && i < MAX_STEPS; ++i) {
-        Square point = queue.first();
-        queue.remove(point);
-
-        if (point.equals(end)) {
-          break;
-        }
-        done.add(point);
-
-        int distanceToPoint = distance.get(point);
-        for (Square neighbor : getNeighbors(point)) {
-          if (isSquareBlocked(neighbor) || done.contains(neighbor)) {
-            continue;
+          if (square.equals(start)) {
+            break;
           }
 
-          Integer oldDistance = distance.get(neighbor);
-          int newDistance = distanceToPoint + squaredDistance(point, neighbor);
-          if (oldDistance == null || newDistance < oldDistance) {
-            int newGuess = newDistance + squaredDistance(neighbor, end);
-            cameFrom.put(neighbor, point);
-            distance.put(neighbor, newDistance);
-            distanceGuess.put(neighbor, newGuess);
-            queue.remove(neighbor);
-            queue.add(neighbor);
+          int distanceToPoint = distance.get(square);
+          for (Square neighbor : getNeighbors(square)) {
+            if (neighbor.getP() < 0
+                || neighbor.getQ() < 0
+                || neighbor.getRightX() > world.getWidth()
+                || neighbor.getBottomY() > world.getHeight()
+                || isSquareBlocked(neighbor)
+                || done.contains(neighbor)) {
+              continue;
+            }
+
+            Integer oldDistance = distance.get(neighbor);
+            int newDistance = distanceToPoint + squaredDistance(square, neighbor);
+            if (oldDistance == null || newDistance < oldDistance) {
+              int newGuess = newDistance + 0; //squaredDistance(neighbor, start);
+              cameFrom.put(neighbor, square);
+              distance.put(neighbor, newDistance);
+              distanceGuess.put(neighbor, newGuess);
+              queue.remove(neighbor);
+              queue.add(neighbor);
+
+              if (debug != null) {
+                debug.fillCircle(neighbor.getCenterX(), neighbor.getCenterY(), 5, Color.red);
+                debug.drawAfterScene();
+                System.out.println("updated " + neighbor);
+              }
+            }
           }
         }
       }
 
       List<Square> path = new ArrayList<>();
-      for (Square point = end; point != null; point = cameFrom.get(point)) {
+      for (Square point = start; point != null; point = cameFrom.get(point)) {
         path.add(point);
       }
-      Collections.reverse(path);
-      return path.size() != 1 ? path : null;
+
+      if (debug != null) {
+        for (Map.Entry<Square, Square> entry : cameFrom.entrySet()) {
+          if (done.contains(entry.getKey())) {
+            debug.fillCircle(
+                entry.getKey().getCenterX(), entry.getKey().getCenterY(), 3, Color.black);
+          }
+          if (entry.getValue() == null) {
+            continue;
+          }
+          debug.drawLine(
+              entry.getKey().getCenterX(),
+              entry.getKey().getCenterY(),
+              entry.getValue().getCenterX(),
+              entry.getValue().getCenterY(),
+              Color.lightGray);
+        }
+        debug.drawBeforeScene();
+
+        brain.drawPath(path, Color.red);
+        debug.drawBeforeScene();
+      }
+
+      return path.get(path.size() - 1).equals(pathTarget) ? path : null;
     }
 
     private Square[] getNeighbors(Square square) {
