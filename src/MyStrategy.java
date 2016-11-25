@@ -1168,6 +1168,7 @@ public final class MyStrategy implements Strategy {
             self.getAngle() - game.getStaffSector() / 2,
             game.getStaffSector(),
             Color.pink);
+        debug.drawBeforeScene();
         brain.drawWaves(
             self.getX(),
             self.getY(),
@@ -1175,7 +1176,7 @@ public final class MyStrategy implements Strategy {
             self.getAngle() - game.getStaffSector() / 2,
             game.getStaffSector(),
             Color.red);
-        debug.drawBeforeScene();
+        debug.drawAfterScene();
       }
     }
 
