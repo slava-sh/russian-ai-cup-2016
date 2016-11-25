@@ -330,7 +330,7 @@ public final class MyStrategy implements Strategy {
         debug.drawBeforeScene();
       }
 
-      Point bonus = maybeGetBonus();
+      Point bonus = bonusFinder.findBonus();
       Point walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
@@ -538,39 +538,6 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private Point maybeGetBonus() {
-      Point bonus = bonusFinder.findBonus();
-
-      // Restrict bonus chasing area.
-      Point a1 = new Point(game.getMapSize() * 0.2, game.getMapSize() * 0.1);
-      Point b1 = new Point(game.getMapSize() * (1 - 0.1), game.getMapSize() * (1 - 0.2));
-      Point a2 = new Point(game.getMapSize() * 0.1, game.getMapSize() * 0.2);
-      Point b2 = new Point(game.getMapSize() * (1 - 0.2), game.getMapSize() * (1 - 0.1));
-      Point center = new Point(game.getMapSize() * 0.5, game.getMapSize() * 0.5);
-
-      double BONUS_CHASE_RADIUS = 300;
-      Point selfPoint = new Point(self);
-      if (bonus != null
-          && center.getDistanceTo(self) > BONUS_CHASE_RADIUS
-          && Point.isClockwise(a1, b1, selfPoint) == Point.isClockwise(a2, b2, selfPoint)) {
-        bonus = null;
-      }
-
-      if (debug != null) {
-        debug.drawLine(a1.getX(), a1.getY(), b1.getX(), b1.getY(), Color.lightGray);
-        debug.drawLine(a2.getX(), a2.getY(), b2.getX(), b2.getY(), Color.lightGray);
-        debug.drawCircle(center.getX(), center.getY(), BONUS_CHASE_RADIUS, Color.lightGray);
-        debug.drawBeforeScene();
-
-        if (bonus != null) {
-          debug.fillCircle(self.getX(), self.getY(), 10, Color.green);
-          debug.drawAfterScene();
-        }
-      }
-
-      return bonus;
-    }
-
     private double getMinionAttackRange(Minion m) {
       return m.getType() == MinionType.FETISH_BLOWDART
           ? game.getFetishBlowdartAttackRange()
@@ -738,7 +705,6 @@ public final class MyStrategy implements Strategy {
   private static class BonusFinder extends WorldObserver {
 
     private Point bonus;
-    private Point oldPosition;
 
     public BonusFinder(Brain brain, Visualizer debug) {
       super(brain, debug);
@@ -749,26 +715,9 @@ public final class MyStrategy implements Strategy {
       if (world.getTickIndex() != 0
           && world.getTickIndex() % game.getBonusAppearanceIntervalTicks() == 0) {
         bonus = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
-        oldPosition = null;
         if (debug != null) {
           System.out.println("bonus at " + bonus);
         }
-      }
-
-      if (world.getTickIndex() % 200 == 0) {
-        if (oldPosition != null
-            && bonus != null
-            && oldPosition.getDistanceTo(self) < self.getRadius()) {
-          if (debug != null) {
-            System.out.println("stuck chasing a bonus");
-          }
-          bonus = null;
-        }
-        oldPosition = new Point(self);
-      }
-      if (debug != null && oldPosition != null) {
-        debug.drawCircle(oldPosition.getX(), oldPosition.getY(), self.getRadius(), Color.gray);
-        debug.drawBeforeScene();
       }
 
       if (bonus != null && bonus.getDistanceTo(self) < self.getVisionRange()) {
