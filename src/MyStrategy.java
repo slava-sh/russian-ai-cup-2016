@@ -120,6 +120,8 @@ public final class MyStrategy implements Strategy {
     protected World world;
     protected Game game;
 
+    private Tree targetTree;
+
     public Brain(Wizard self, World world, Game game) {
       this.self = self;
       this.world = world;
@@ -345,19 +347,57 @@ public final class MyStrategy implements Strategy {
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
+      LivingUnit targetTree;
       if (!lowHP && (shootingTarget == null || bonus != null)) {
-        walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
+        targetTree = walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
       } else if (!lowHP && self.getDistanceTo(shootingTarget) > self.getCastRange()) {
-        walkTo(new Point(shootingTarget), move, selfPoint, p1, p2, p3);
+        targetTree = walkTo(new Point(shootingTarget), move, selfPoint, p1, p2, p3);
       } else if (reallyLowHP || inDanger) {
-        walkTo(field.getPreviousWaypoint(), move, selfPoint, p1, p2, p3);
+        targetTree = walkTo(field.getPreviousWaypoint(), move, selfPoint, p1, p2, p3);
       } else {
-        walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
+        targetTree = walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
       }
 
-      if (shootingTarget != null) {
-        walker.turnTo(shootingTarget, move);
+      if (targetTree != null) {
+        shootingTarget = targetTree;
+      }
 
+      walker.turnTo(shootingTarget != null ? new Point(shootingTarget) : walkingTarget, move);
+
+      /*
+      if (targetTree != null
+          && Math.abs(self.getAngleTo(targetTree)) < game.getStaffSector() / 2
+          && self.getRemainingActionCooldownTicks() == 0) {
+        int[] cooldown = self.getRemainingCooldownTicksByAction();
+
+        if (cooldown[ActionType.STAFF.ordinal()] == 0
+            && (p1.getDistanceTo(targetTree) < targetTree.getRadius()
+                || p2.getDistanceTo(targetTree) < targetTree.getRadius()
+                || p3.getDistanceTo(targetTree) < targetTree.getRadius())) {
+          move.setAction(ActionType.STAFF);
+        } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0) {
+          double distance = self.getDistanceTo(targetTree);
+          if (distance <= self.getCastRange()) {
+            double angle = self.getAngleTo(targetTree);
+            if (Math.abs(angle) < game.getStaffSector() / 2) {
+              move.setAction(ActionType.MAGIC_MISSILE);
+              move.setCastAngle(angle);
+              move.setMinCastDistance(
+                  distance - targetTree.getRadius() + game.getMagicMissileRadius());
+            }
+          }
+        }
+      }
+
+      if (debug != null) {
+        if (targetTree != null) {
+          debug.drawLine(
+              self.getX(), self.getY(), targetTree.getX(), targetTree.getY(), Color.black);
+        }
+      }
+      */
+
+      if (shootingTarget != null) {
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
           double angle = self.getAngleTo(shootingTarget);
@@ -465,7 +505,7 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private void walkTo(
+    private Tree walkTo(
         Point walkingTarget, Move move, Point selfPoint, Point p1, Point p2, Point p3) {
       Point shortWalkingTarget = getShortWalkingTarget(walkingTarget);
       Tree targetTree = getTargetTree(selfPoint, shortWalkingTarget);
@@ -473,38 +513,7 @@ public final class MyStrategy implements Strategy {
       walker.goTo(shortWalkingTarget, move);
       stuck.unstuck(move);
 
-      walker.turnTo(targetTree != null ? new Point(targetTree) : shortWalkingTarget, move);
-
-      if (targetTree != null
-          && Math.abs(self.getAngleTo(targetTree)) < game.getStaffSector() / 2
-          && self.getRemainingActionCooldownTicks() == 0) {
-        int[] cooldown = self.getRemainingCooldownTicksByAction();
-
-        if (cooldown[ActionType.STAFF.ordinal()] == 0
-            && (p1.getDistanceTo(targetTree) < targetTree.getRadius()
-                || p2.getDistanceTo(targetTree) < targetTree.getRadius()
-                || p3.getDistanceTo(targetTree) < targetTree.getRadius())) {
-          move.setAction(ActionType.STAFF);
-        } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0) {
-          double distance = self.getDistanceTo(targetTree);
-          if (distance <= self.getCastRange()) {
-            double angle = self.getAngleTo(targetTree);
-            if (Math.abs(angle) < game.getStaffSector() / 2) {
-              move.setAction(ActionType.MAGIC_MISSILE);
-              move.setCastAngle(angle);
-              move.setMinCastDistance(
-                  distance - targetTree.getRadius() + game.getMagicMissileRadius());
-            }
-          }
-        }
-      }
-
-      if (debug != null) {
-        if (targetTree != null) {
-          debug.drawLine(
-              self.getX(), self.getY(), targetTree.getX(), targetTree.getY(), Color.black);
-        }
-      }
+      return targetTree;
     }
 
     private Tree getTargetTree(Point selfPoint, Point walkingTarget) {
