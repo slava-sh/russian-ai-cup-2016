@@ -827,9 +827,13 @@ public final class MyStrategy implements Strategy {
 
   private static class Field extends WorldObserver {
 
+    private static final int WEAK_TREE_PRIORITY = -5;
+    private static final int MINION_PRIORITY = -100;
+
     private final Point[] waypoints;
     private Set<Square> blockedSquares = new HashSet<>();
     private Map<Square, Tree> squareToWeakTree = new HashMap<>();
+    private Map<Square, Integer> priority = new HashMap<>();
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
       super(brain, debug);
@@ -855,6 +859,7 @@ public final class MyStrategy implements Strategy {
     public void update() {
       updateBlockedSquares();
       updateWeakTrees();
+      updatePriorities();
 
       if (debug != null) {
         for (int i = 0; i < waypoints.length; ++i) {
@@ -870,6 +875,15 @@ public final class MyStrategy implements Strategy {
         }
         debug.drawBeforeScene();
       }
+    }
+
+    private void updatePriorities() {
+      priority.clear();
+      squareToWeakTree.keySet().forEach(square -> priority.put(square, WEAK_TREE_PRIORITY));
+      Arrays.stream(world.getMinions())
+          .filter(m -> m.getFaction() != Faction.NEUTRAL)
+          .flatMap(m -> getSquaresBlockedBy(m).stream())
+          .forEach(square -> priority.put(square, MINION_PRIORITY));
     }
 
     private void updateWeakTrees() {
@@ -1036,7 +1050,8 @@ public final class MyStrategy implements Strategy {
           Integer oldDistance = distance.get(neighbor);
           int newDistance = distanceToPoint + squaredDistance(point, neighbor);
           if (oldDistance == null || newDistance < oldDistance) {
-            int newGuess = newDistance + squaredDistance(neighbor, end);
+            int newGuess =
+                newDistance + squaredDistance(neighbor, end) - priority.getOrDefault(neighbor, 0);
             cameFrom.put(neighbor, point);
             distance.put(neighbor, newDistance);
             distanceGuess.put(neighbor, newGuess);
