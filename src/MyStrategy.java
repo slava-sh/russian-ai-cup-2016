@@ -408,7 +408,7 @@ public final class MyStrategy implements Strategy {
             double distance = self.getDistanceTo(targetTree);
             if (distance <= self.getCastRange()) {
               double angle = self.getAngleTo(targetTree);
-              if (StrictMath.abs(angle) < game.getStaffSector() / 2) {
+              if (Math.abs(angle) < game.getStaffSector() / 2) {
                 move.setAction(ActionType.MAGIC_MISSILE);
                 move.setCastAngle(angle);
                 move.setMinCastDistance(
@@ -475,7 +475,7 @@ public final class MyStrategy implements Strategy {
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
           double angle = self.getAngleTo(shootingTarget);
-          if (StrictMath.abs(angle) < game.getStaffSector() / 2.0D) {
+          if (Math.abs(angle) < game.getStaffSector() / 2.0D) {
             move.setAction(ActionType.MAGIC_MISSILE);
             move.setCastAngle(angle);
             move.setMinCastDistance(
@@ -1457,7 +1457,7 @@ public final class MyStrategy implements Strategy {
     }
 
     public double getDistanceTo(double x, double y) {
-      return StrictMath.hypot(this.x - x, this.y - y);
+      return Math.hypot(this.x - x, this.y - y);
     }
 
     public double getDistanceTo(Point point) {
