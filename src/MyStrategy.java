@@ -278,16 +278,26 @@ public final class MyStrategy implements Strategy {
       BiPredicate<Unit, Double> endangeredBy =
           (u, attackRange) ->
               isEnemy(u) && self.getDistanceTo(u) < attackRange + self.getRadius() * 1.5;
+      long wizardDangerCount =
+          Arrays.stream(world.getWizards())
+              .filter(w -> endangeredBy.test(w, w.getCastRange()))
+              .count();
+      long buildingDangerCount =
+          Arrays.stream(world.getBuildings())
+              .filter(b -> endangeredBy.test(b, b.getAttackRange()))
+              .count();
+      long minionDangerCount =
+          Arrays.stream(world.getMinions())
+              .filter(m -> endangeredBy.test(m, getMinionAttackRange(m)))
+              .count();
       boolean inDanger =
-          Arrays.asList(world.getWizards())
-                  .stream()
-                  .anyMatch(w -> endangeredBy.test(w, w.getCastRange()))
-              || Arrays.asList(world.getBuildings())
-                  .stream()
-                  .anyMatch(b -> endangeredBy.test(b, b.getAttackRange()))
-              || Arrays.asList(world.getMinions())
-                  .stream()
-                  .anyMatch(m -> endangeredBy.test(m, getMinionAttackRange(m)));
+          wizardDangerCount != 0 || buildingDangerCount != 0 || minionDangerCount != 0;
+      boolean inExtremeDanger =
+          (wizardDangerCount + buildingDangerCount + minionDangerCount / 2) >= 3;
+      if (inExtremeDanger) {
+        lowHP = true; // HACK
+      }
+
       if (inDanger && debug != null) {
         debug.drawCircle(self.getX(), self.getY(), self.getRadius() / 2, Color.red);
         debug.drawBeforeScene();
