@@ -104,7 +104,7 @@ public final class MyStrategy implements Strategy {
 
   private static class Brain {
 
-    private static final int IDLE_TICKS = 0; //125;
+    private static final int IDLE_TICKS = 0;
     private final Faction ALLY_FRACTION;
     private final Faction ENEMY_FRACTION;
 
@@ -768,7 +768,7 @@ public final class MyStrategy implements Strategy {
             new Point(100, mapSize - 100),
             new Point(mapSize * 0.3, mapSize * 0.7),
             new Point(mapSize * 0.6, mapSize * 0.6),
-            new Point(mapSize * 0.6, mapSize * 0.4),
+            new Point(mapSize * 0.65, mapSize * 0.35),
             new Point(mapSize * 0.75, mapSize * 0.25),
           };
     }
@@ -939,7 +939,7 @@ public final class MyStrategy implements Strategy {
       for (int waypointIndex = 0; waypointIndex < lastWaypointIndex; ++waypointIndex) {
         Point waypoint = waypoints[waypointIndex];
 
-        if (waypoint.getDistanceTo(self) <= self.getRadius() * 2) {
+        if (waypoint.getDistanceTo(self) <= self.getRadius() * 4) {
           return waypoints[waypointIndex + 1];
         }
 
@@ -957,7 +957,7 @@ public final class MyStrategy implements Strategy {
       for (int waypointIndex = waypoints.length - 1; waypointIndex > 0; --waypointIndex) {
         Point waypoint = waypoints[waypointIndex];
 
-        if (waypoint.getDistanceTo(self) <= self.getRadius() * 2) {
+        if (waypoint.getDistanceTo(self) <= self.getRadius() * 3) {
           return waypoints[waypointIndex - 1];
         }
 
