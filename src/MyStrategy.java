@@ -348,7 +348,7 @@ public final class MyStrategy implements Strategy {
       }
 
       if (shootingTarget != null) {
-        walker.turnTo(new Point(shootingTarget), move);
+        walker.turnTo(shootingTarget, move);
 
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
@@ -740,7 +740,7 @@ public final class MyStrategy implements Strategy {
 
   private static class Field extends WorldObserver {
 
-    private static final int FIND_PATH_MAX_STEPS = 250;
+    private static final int FIND_PATH_MAX_STEPS = 200;
     private static final int WEAK_TREE_PRIORITY = -100;
     private static final int MOVING_UNIT_PRIORITY = -1000;
     private static final int FORWARD_SQUARE_PRIORITY = 1000;
@@ -759,7 +759,8 @@ public final class MyStrategy implements Strategy {
       waypoints =
           new Point[] {
             new Point(100, mapSize - 100),
-            new Point(800, mapSize - 800),
+            new Point(mapSize * 0.3, mapSize * 0.7),
+            new Point(mapSize * 0.6, mapSize * 0.4),
             new Point(mapSize * 0.75, mapSize * 0.25),
           };
     }
@@ -977,15 +978,14 @@ public final class MyStrategy implements Strategy {
       distanceGuess.put(start, 0);
       queue.add(start);
 
-      int i = 0;
-      for (; !queue.isEmpty() && i < FIND_PATH_MAX_STEPS; ++i) {
+      for (int i = 0; !queue.isEmpty() && i < FIND_PATH_MAX_STEPS; ++i) {
         Square point = queue.first();
         queue.remove(point);
+        done.add(point);
 
         if (point.equals(end)) {
           break;
         }
-        done.add(point);
 
         int distanceToPoint = distance.get(point);
         for (Square neighbor : getNeighbors(point)) {
@@ -1005,6 +1005,19 @@ public final class MyStrategy implements Strategy {
             queue.add(neighbor);
           }
         }
+      }
+
+      if (!done.contains(end)) {
+        Square bestEnd = null;
+        double bestDistanceGuess = 0;
+        for (Square option : done) {
+          double optionDistanceGuess = distanceGuess.get(option);
+          if (bestEnd == null || optionDistanceGuess < bestDistanceGuess) {
+            bestEnd = option;
+            bestDistanceGuess = optionDistanceGuess;
+          }
+        }
+        end = bestEnd;
       }
 
       List<Square> path = new ArrayList<>();
@@ -1031,11 +1044,11 @@ public final class MyStrategy implements Strategy {
         }
         debug.drawBeforeScene();
 
-        brain.drawPath(path, Color.red);
+        brain.drawPath(path, Color.black);
         debug.drawBeforeScene();
       }
 
-      return path.get(path.size() - 1).equals(end) ? path : null;
+      return path;
     }
 
     private Square[] getNeighbors(Square square) {
