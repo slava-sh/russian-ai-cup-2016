@@ -1,16 +1,18 @@
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.BiPredicate;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -94,6 +96,7 @@ public final class MyStrategy implements Strategy {
 
     private final Visualizer debug;
     private final List<WorldObserver> observers;
+    private final Stuck stuck;
     private final BonusFinder bonusFinder;
     private final Field field;
     private final Walker walker;
@@ -124,6 +127,9 @@ public final class MyStrategy implements Strategy {
       debug = debugVisualizer;
 
       observers = new ArrayList<>();
+
+      stuck = new Stuck(this, debug, random);
+      observers.add(stuck);
 
       bonusFinder = new BonusFinder(this, debug);
       observers.add(bonusFinder);
@@ -334,8 +340,7 @@ public final class MyStrategy implements Strategy {
           debug.drawBeforeScene();
         }
 
-        field.setPathTarget(Square.containing(target));
-        List<Square> path = field.findPath(Square.containing(self));
+        List<Square> path = field.findPath(Square.containing(self), Square.containing(target));
         if (path != null) {
           int i = 0;
           while (i + 1 < path.size() && !field.isLineBlocked(path.get(0), path.get(i + 1))) {
@@ -418,6 +423,15 @@ public final class MyStrategy implements Strategy {
           }
           debug.drawAfterScene();
           debug.sync();
+        }
+
+        stuck.unstuck(move);
+
+        if (debug != null) {
+          if (stuck.state == Stuck.State.STUCK) {
+            debug.showText(self.getX(), self.getY() + 10, "Stuck", Color.red);
+            debug.drawAfterScene();
+          }
         }
 
         System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000);
@@ -692,6 +706,78 @@ public final class MyStrategy implements Strategy {
     protected void update() {}
   }
 
+  private static class Stuck extends WorldObserver {
+
+    private static final int STUCK_DETECTION_TICKS = 10;
+    private static final double STUCK_DISTANCE = 10;
+    private static final double SPEED_EPS = 0.01;
+    private static final double MIN_WALKING_SPEED = 1;
+
+    private Random random;
+
+    private State state;
+    private boolean lastMoveSucceeded;
+
+    private List<Point> positionHistory = new LinkedList<>();
+    private Point requestedSpeed;
+    private Point unstuckDirection;
+
+    public Stuck(Brain brain, Visualizer debug, Random random) {
+      super(brain, debug);
+      this.random = random;
+    }
+
+    @Override
+    protected void update() {
+      positionHistory.add(0, new Point(self));
+      if (positionHistory.size() > STUCK_DETECTION_TICKS) {
+        positionHistory.remove(STUCK_DETECTION_TICKS);
+      }
+    }
+
+    public void unstuck(Move move) {
+      updateStuckState();
+
+      if (state == State.STUCK) {
+        if (unstuckDirection == null || !lastMoveSucceeded) {
+          unstuckDirection = Point.fromPolar(100, (random.nextDouble() * 2 - 1) * Math.PI);
+        }
+        brain.walker.goTo(unstuckDirection.add(new Point(self)), move);
+      }
+
+      Point strafeSpeed = Point.fromPolar(move.getStrafeSpeed(), self.getAngle() + Math.PI / 2);
+      requestedSpeed = Point.fromPolar(move.getSpeed(), self.getAngle()).add(strafeSpeed);
+    }
+
+    private void updateStuckState() {
+      if (positionHistory.size() < STUCK_DETECTION_TICKS) {
+        state = State.STANDING;
+        return;
+      }
+      Point position = positionHistory.get(0);
+      Point lastPosition = positionHistory.get(1);
+      Point speed = position.sub(lastPosition);
+      lastMoveSucceeded = speed.getDistanceTo(requestedSpeed) < SPEED_EPS;
+      if (!lastMoveSucceeded) {
+        state = State.STUCK;
+      } else {
+        state = speed.length() > MIN_WALKING_SPEED ? State.WALKING : State.STANDING;
+        if (state == State.WALKING) {
+          Point oldPosition = positionHistory.get(STUCK_DETECTION_TICKS - 1);
+          if (oldPosition.getDistanceTo(position) < STUCK_DISTANCE) {
+            state = State.STUCK;
+          }
+        }
+      }
+    }
+
+    private enum State {
+      STANDING,
+      WALKING,
+      STUCK,
+    }
+  }
+
   private static class BonusFinder extends WorldObserver {
 
     private Point bonus;
@@ -806,11 +892,17 @@ public final class MyStrategy implements Strategy {
 
     private void updateBlockedSquares() {
       blockedSquares.clear();
-      for (LivingUnit unit : getAllObstacles()) {
-        if (unit.getLife() > game.getMagicMissileDirectDamage()) {
-          blockedSquares.addAll(getSquaresBlockedBy(unit));
-        }
-      }
+      Stream.of(
+              Arrays.stream(world.getTrees()),
+              Arrays.stream(world.getBuildings()),
+              Arrays.stream(world.getMinions()).filter(m -> m.getFaction() == Faction.NEUTRAL))
+          .flatMap(Function.identity())
+          .forEach(
+              (LivingUnit unit) -> {
+                if (unit.getLife() > game.getMagicMissileDirectDamage()) {
+                  blockedSquares.addAll(getSquaresBlockedBy(unit));
+                }
+              });
       blockedSquares.remove(Square.containing(self));
 
       if (debug != null) {
@@ -869,11 +961,11 @@ public final class MyStrategy implements Strategy {
       return getPointsOnLine(a, b)
           .map(p -> Square.containing(p))
           .filter(
-              s -> {
-                if (s.equals(prev[0])) {
+              square -> {
+                if (square.equals(prev[0])) {
                   return false;
                 }
-                prev[0] = s;
+                prev[0] = square;
                 return true;
               });
     }
@@ -966,7 +1058,30 @@ public final class MyStrategy implements Strategy {
         path.add(point);
       }
       Collections.reverse(path);
-      return path.size() != 1 ? path : null;
+
+      if (debug != null) {
+        for (Map.Entry<Square, Square> entry : cameFrom.entrySet()) {
+          if (entry.getValue() == null) {
+            continue;
+          }
+          if (!done.contains(entry.getKey())) {
+            debug.fillCircle(
+                entry.getKey().getCenterX(), entry.getKey().getCenterY(), 3, Color.lightGray);
+          }
+          debug.drawLine(
+              entry.getKey().getCenterX(),
+              entry.getKey().getCenterY(),
+              entry.getValue().getCenterX(),
+              entry.getValue().getCenterY(),
+              Color.lightGray);
+        }
+        debug.drawBeforeScene();
+
+        brain.drawPath(path, Color.red);
+        debug.drawBeforeScene();
+      }
+
+      return path.get(path.size() - 1).equals(end) ? path : null;
     }
 
     private Square[] getNeighbors(Square square) {
