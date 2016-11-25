@@ -758,15 +758,8 @@ public final class MyStrategy implements Strategy {
 
       waypoints =
           new Point[] {
-            new Point(100.0D, mapSize - 100.0D),
-            self.getId() == 1 || self.getId() == 2 || self.getId() == 6 || self.getId() == 7
-                ? new Point(200.0D, mapSize - 600.0D)
-                : new Point(600.0D, mapSize - 200.0D),
-            new Point(800.0D, mapSize - 800.0D),
-            new Point(mapSize * 0.35, mapSize * 0.65),
-            new Point(mapSize * 0.45, mapSize * 0.55),
-            new Point(mapSize * 0.55, mapSize * 0.45),
-            new Point(mapSize * 0.65, mapSize * 0.35),
+            new Point(100, mapSize - 100),
+            new Point(800, mapSize - 800),
             new Point(mapSize * 0.75, mapSize * 0.25),
           };
     }
