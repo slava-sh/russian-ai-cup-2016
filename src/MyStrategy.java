@@ -723,6 +723,7 @@ public final class MyStrategy implements Strategy {
     private List<Point> positionHistory = new LinkedList<>();
     private Point requestedSpeed;
     private Point unstuckDirection;
+    private int stuckTicks;
 
     public Stuck(Brain brain, Visualizer debug, Random random) {
       super(brain, debug);
@@ -741,7 +742,12 @@ public final class MyStrategy implements Strategy {
       updateStuckState();
 
       if (state == State.STUCK) {
-        if (unstuckDirection == null || !lastMoveSucceeded) {
+        ++stuckTicks;
+        if (stuckTicks == 1) {
+          unstuckDirection = Point.fromPolar(100, requestedSpeed.getAngle() + Math.PI / 2);
+        } else if (stuckTicks == 2) {
+          unstuckDirection = unstuckDirection.negate();
+        } else if (!lastMoveSucceeded) {
           unstuckDirection = Point.fromPolar(100, (random.nextDouble() * 2 - 1) * Math.PI);
         }
         brain.walker.goTo(unstuckDirection.add(new Point(self)), move);
@@ -764,6 +770,7 @@ public final class MyStrategy implements Strategy {
         state = State.STUCK;
       } else {
         state = speed.length() > MIN_WALKING_SPEED ? State.WALKING : State.STANDING;
+        stuckTicks = 0;
       }
     }
 
