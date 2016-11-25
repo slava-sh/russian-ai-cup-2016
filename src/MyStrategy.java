@@ -36,6 +36,7 @@ public final class MyStrategy implements Strategy {
 
   private static final int SQUARE_CRUDENESS = 20;
 
+  private static final boolean DEBUG_TIME = false;
   private static final boolean DEBUG_FIND_PATH = false;
   private static final boolean DEBUG_DRAW_WALLS = false;
   private static final boolean DEBUG_DRAW_WEAK_TREES = false;
@@ -60,14 +61,16 @@ public final class MyStrategy implements Strategy {
 
   @Override
   public void move(Wizard self, World world, Game game, Move move) {
-    long startTime = System.nanoTime();
+    long startTime = DEBUG_TIME ? System.nanoTime() : 0;
 
     if (brain == null) {
       brain = new Brain(self, world, game);
     }
     brain.move(self, world, game, move);
 
-    System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000 + " ms");
+    if (DEBUG_TIME) {
+      System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000 + " ms");
+    }
   }
 
   public interface Visualizer {
