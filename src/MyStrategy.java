@@ -36,6 +36,13 @@ public final class MyStrategy implements Strategy {
 
   private static final int SQUARE_CRUDENESS = 20;
 
+  private static final boolean DEBUG_FIND_PATH = false;
+  private static final boolean DEBUG_DRAW_WALLS = false;
+  private static final boolean DEBUG_DRAW_WEAK_TREES = false;
+  private static final boolean DEBUG_CIRCLE_OBSTACLES = false;
+  private static final boolean DEBUG_DRAW_MOVING_UNITS = false;
+  private static final boolean DEBUG_SHOW_OBSTACLE_HP = false;
+
   private Brain brain;
 
   private static double binarySearch(double a, double b, Predicate<Double> p) {
@@ -335,12 +342,10 @@ public final class MyStrategy implements Strategy {
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
-      if (!lowHP) {
-        if (shootingTarget == null || bonus != null) {
-          walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
-        } else if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
-          walkTo(new Point(shootingTarget), move, selfPoint, p1, p2, p3);
-        }
+      if (!lowHP && (shootingTarget == null || bonus != null)) {
+        walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
+      } else if (!lowHP && self.getDistanceTo(shootingTarget) > self.getCastRange()) {
+        walkTo(new Point(shootingTarget), move, selfPoint, p1, p2, p3);
       } else if (reallyLowHP || inDanger) {
         walkTo(field.getPreviousWaypoint(), move, selfPoint, p1, p2, p3);
       } else {
@@ -380,14 +385,16 @@ public final class MyStrategy implements Strategy {
             Color.black);
         debug.drawAfterScene();
 
-        field
-            .getAllObstacles()
-            .stream()
-            .forEach(
-                u ->
-                    debug.drawCircle(
-                        u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
-        debug.drawAfterScene();
+        if (DEBUG_CIRCLE_OBSTACLES) {
+          field
+              .getAllObstacles()
+              .stream()
+              .forEach(
+                  u ->
+                      debug.drawCircle(
+                          u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
+          debug.drawAfterScene();
+        }
 
         debug.fillCircle(p1.getX(), p1.getY(), 2, Color.red);
         debug.fillCircle(p2.getX(), p2.getY(), 2, Color.red);
@@ -398,10 +405,12 @@ public final class MyStrategy implements Strategy {
             self.getX(), self.getY(), walkingTarget.getX(), walkingTarget.getY(), Color.green);
         debug.drawAfterScene();
 
-        for (LivingUnit unit : field.getAllObstacles()) {
-          debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
+        if (DEBUG_SHOW_OBSTACLE_HP) {
+          for (LivingUnit unit : field.getAllObstacles()) {
+            debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
+          }
+          debug.drawAfterScene();
         }
-        debug.drawAfterScene();
 
         if (stuck.state == Stuck.State.STUCK) {
           debug.showText(self.getX() - 20, self.getY() + 20, "Stuck", Color.black);
@@ -447,11 +456,6 @@ public final class MyStrategy implements Strategy {
             String.valueOf(
                 self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()]),
             Color.black);
-        debug.drawAfterScene();
-
-        for (LivingUnit unit : field.getAllObstacles()) {
-          debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
-        }
         debug.drawAfterScene();
 
         debug.sync();
@@ -760,6 +764,7 @@ public final class MyStrategy implements Strategy {
           new Point[] {
             new Point(100, mapSize - 100),
             new Point(mapSize * 0.3, mapSize * 0.7),
+            new Point(mapSize * 0.6, mapSize * 0.6),
             new Point(mapSize * 0.6, mapSize * 0.4),
             new Point(mapSize * 0.75, mapSize * 0.25),
           };
@@ -820,7 +825,7 @@ public final class MyStrategy implements Strategy {
       walls.remove(selfSquare);
       walls.removeAll(Arrays.asList(getNeighbors(selfSquare)));
 
-      if (debug != null) {
+      if (debug != null && DEBUG_DRAW_WALLS) {
         for (Square square : walls) {
           debug.fillRect(
               square.getLeftX(),
@@ -843,7 +848,7 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      if (debug != null) {
+      if (debug != null && DEBUG_DRAW_WEAK_TREES) {
         for (Square square : weakTrees.keySet()) {
           debug.drawRect(
               square.getLeftX(),
@@ -867,7 +872,7 @@ public final class MyStrategy implements Strategy {
                           || unit.getLife() > game.getMagicMissileDirectDamage()))
           .forEach(unit -> getSquares(unit).stream().forEach(s -> movingUnits.put(s, unit)));
 
-      if (debug != null) {
+      if (debug != null && DEBUG_DRAW_MOVING_UNITS) {
         movingUnits
             .keySet()
             .stream()
@@ -1009,12 +1014,12 @@ public final class MyStrategy implements Strategy {
 
       if (!done.contains(end)) {
         Square bestEnd = null;
-        double bestDistanceGuess = 0;
+        double bestSquaredDistance = 0;
         for (Square option : done) {
-          double optionDistanceGuess = distanceGuess.get(option);
-          if (bestEnd == null || optionDistanceGuess < bestDistanceGuess) {
+          double optionSquaredDistance = squaredDistance(option, end);
+          if (bestEnd == null || optionSquaredDistance < bestSquaredDistance) {
             bestEnd = option;
-            bestDistanceGuess = optionDistanceGuess;
+            bestSquaredDistance = optionSquaredDistance;
           }
         }
         end = bestEnd;
@@ -1026,7 +1031,7 @@ public final class MyStrategy implements Strategy {
       }
       Collections.reverse(path);
 
-      if (debug != null) {
+      if (debug != null && DEBUG_FIND_PATH) {
         for (Map.Entry<Square, Square> entry : cameFrom.entrySet()) {
           if (entry.getValue() == null) {
             continue;
@@ -1122,92 +1127,10 @@ public final class MyStrategy implements Strategy {
                 Point bv = v.sub(b);
                 return bv.isClockwiseTo(ba) == aIsClockwiseToB;
               });
-
-      // Speed.
       Point v = direction.mul(k);
-
-      // Try avoiding collisions.
-      final int T = 8; // Look-ahead ticks.
-      final int N = 4; // Alternatives to consider.
-
-      /*
-      if (debug != null) {
-        for (int i = 1; i <= N * 2; ++i) {
-          int j = i / 2;
-          int sign = i % 2 == 0 ? 1 : -1;
-          Point newV = v.rotate(sign * Math.PI * 2 * j / N);
-          debug.drawCircle(
-              self.getX() + T * newV.getX(), self.getY() + T * newV.getY(), 3, Color.orange);
-        }
-        debug.fillCircle(self.getX() + T * v.getX(), self.getY() + T * v.getY(), 4, Color.cyan);
-        debug.drawAfterScene();
-      }
-
-      List<LivingUnit> obstacles = brain.field.getAllObstacles();
-      for (int i = 1; i <= N * 2; ++i) {
-        int j = i / 2;
-        int sign = i % 1 == 0 ? 1 : -1;
-        Point newV = v.rotate(sign * Math.PI * 2 * j / N);
-        Point newSelf = newV.mul(T).add(new Point(self));
-        boolean noCollisions =
-            obstacles
-                .stream()
-                .allMatch(u -> newSelf.getDistanceTo(u) > u.getRadius() + self.getRadius());
-        if (noCollisions) {
-          v = newV;
-          break;
-        }
-      }
-      */
 
       move.setSpeed(aSign * v.project(a));
       move.setStrafeSpeed(bSign * v.project(b));
-
-      if (debug != null) {
-        debug.fillCircle(self.getX() + T * v.getX(), self.getY() + T * v.getY(), 5, Color.orange);
-
-        boolean DISPLAY_BOX = false;
-        if (DISPLAY_BOX) {
-          List<Point> box = new ArrayList<>();
-          box.add(
-              new Point(
-                  self.getX() + T * game.getWizardForwardSpeed() * Math.cos(self.getAngle()),
-                  self.getY() + T * game.getWizardForwardSpeed() * Math.sin(self.getAngle())));
-          box.add(
-              new Point(
-                  self.getX()
-                      + T * game.getWizardStrafeSpeed() * Math.cos(self.getAngle() + Math.PI / 2),
-                  self.getY()
-                      + T * game.getWizardStrafeSpeed() * Math.sin(self.getAngle() + Math.PI / 2)));
-          box.add(
-              new Point(
-                  self.getX()
-                      + T * game.getWizardBackwardSpeed() * Math.cos(self.getAngle() + Math.PI),
-                  self.getY()
-                      + T * game.getWizardBackwardSpeed() * Math.sin(self.getAngle() + Math.PI)));
-          box.add(
-              new Point(
-                  self.getX()
-                      + T
-                          * game.getWizardStrafeSpeed()
-                          * Math.cos(self.getAngle() + Math.PI * 3 / 2),
-                  self.getY()
-                      + T
-                          * game.getWizardStrafeSpeed()
-                          * Math.sin(self.getAngle() + Math.PI * 3 / 2)));
-          for (int i = 0; i < box.size(); ++i) {
-            int j = (i + 1) % box.size();
-            debug.drawLine(
-                box.get(i).getX(),
-                box.get(i).getY(),
-                box.get(j).getX(),
-                box.get(j).getY(),
-                Color.blue);
-          }
-        }
-
-        debug.drawAfterScene();
-      }
     }
 
     public void turnTo(Point point, Move move) {
