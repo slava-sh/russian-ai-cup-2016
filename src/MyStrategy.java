@@ -98,6 +98,7 @@ public final class MyStrategy implements Strategy {
     private final Faction ALLY_FRACTION;
     private final Faction ENEMY_FRACTION;
 
+    private final Random random;
     private final Visualizer debug;
     private final List<WorldObserver> observers;
     private final Stuck stuck;
@@ -108,9 +109,6 @@ public final class MyStrategy implements Strategy {
     protected Wizard self;
     protected World world;
     protected Game game;
-    Point target = new Point(4000 * 0.2, 4000 * 0.3);
-    Random random = new Random();
-    Point oldPos = new Point(0, 0);
 
     public Brain(Wizard self, World world, Game game) {
       this.self = self;
@@ -129,6 +127,8 @@ public final class MyStrategy implements Strategy {
         // Visualizer is not available.
       }
       debug = debugVisualizer;
+
+      random = new Random(game.getRandomSeed());
 
       observers = new ArrayList<>();
 
@@ -292,151 +292,6 @@ public final class MyStrategy implements Strategy {
     public void move(Wizard self, World world, Game game, Move move) {
       updateObservers(self, world, game);
 
-      if (true) {
-        if (debug != null) {
-          debug.showText(
-              self.getX(),
-              self.getY(),
-              String.valueOf(self.getRemainingActionCooldownTicks()),
-              Color.black);
-          debug.drawAfterScene();
-
-          field
-              .getAllObstacles()
-              .stream()
-              .forEach(
-                  u ->
-                      debug.drawCircle(
-                          u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
-          debug.drawAfterScene();
-        }
-
-        if (target == null
-            || field.walls.contains(Square.containing(target))
-            //|| world.getTickIndex() % 200 == 0 && oldPos.getDistanceTo(self) < 15
-            || target.getDistanceTo(self) < self.getRadius()) {
-          System.out.println("new target");
-          while (true) {
-            target =
-                new Point(
-                    self.getX() + (random.nextDouble() * 2 - 1) * 4000,
-                    self.getY() + (random.nextDouble() * 2 - 1) * 4000);
-            if (!field.walls.contains(target)
-                && !(target.getX() < 0
-                    || target.getY() < 0
-                    || target.getX() > 4000
-                    || target.getY() > 4000)) {
-              break;
-            }
-          }
-        }
-
-        if (world.getTickIndex() % 200 == 0) {
-          oldPos = new Point(self);
-        }
-
-        Point walkingTarget = target;
-
-        if (debug != null) {
-          debug.drawLine(self.getX(), self.getY(), target.getX(), target.getY(), Color.blue);
-          debug.drawBeforeScene();
-        }
-
-        List<Square> path = field.findPath(Square.containing(self), Square.containing(target));
-        if (path != null) {
-          int i = 0;
-          while (i + 1 < path.size()
-              && field
-                  .getSquaresOnLine(path.get(0), path.get(i + 1))
-                  .noneMatch(s -> field.walls.contains(s) || field.movingUnits.containsKey(s))) {
-            ++i;
-          }
-          if (i == 0 && 1 < path.size()) {
-            i = 1;
-          }
-
-          walkingTarget = path.get(i).getCenter();
-
-          if (debug != null) {
-            debug.drawLine(
-                self.getX(), self.getY(), walkingTarget.getX(), walkingTarget.getY(), Color.green);
-            debug.drawAfterScene();
-          }
-        }
-
-        Point selfPoint = new Point(self);
-        Point p1 =
-            Point.fromPolar(game.getStaffRange(), self.getAngle() + game.getStaffSector() / 2)
-                .add(selfPoint);
-        Point p2 = Point.fromPolar(game.getStaffRange(), self.getAngle()).add(selfPoint);
-        Point p3 =
-            Point.fromPolar(game.getStaffRange(), self.getAngle() - game.getStaffSector() / 2)
-                .add(selfPoint);
-        if (debug != null) {
-          debug.fillCircle(p1.getX(), p1.getY(), 2, Color.red);
-          debug.fillCircle(p2.getX(), p2.getY(), 2, Color.red);
-          debug.fillCircle(p3.getX(), p3.getY(), 2, Color.red);
-          debug.drawAfterScene();
-        }
-
-        walker.goTo(walkingTarget, move);
-
-        Tree targetTree =
-            field
-                .getSquaresOnLine(selfPoint, walkingTarget)
-                .map(s -> field.weakTrees.get(s))
-                .filter(t -> t != null)
-                .findFirst()
-                .orElse(null);
-        if (debug != null && targetTree != null) {
-          debug.drawLine(
-              self.getX(), self.getY(), targetTree.getX(), targetTree.getY(), Color.black);
-        }
-        walker.turnTo(targetTree != null ? new Point(targetTree) : walkingTarget, move);
-
-        if (targetTree != null
-            && Math.abs(self.getAngleTo(targetTree)) < game.getStaffSector() / 2
-            && self.getRemainingActionCooldownTicks() == 0) {
-          int[] cooldown = self.getRemainingCooldownTicksByAction();
-
-          if (cooldown[ActionType.STAFF.ordinal()] == 0
-              && (p1.getDistanceTo(targetTree) < targetTree.getRadius()
-                  || p2.getDistanceTo(targetTree) < targetTree.getRadius()
-                  || p3.getDistanceTo(targetTree) < targetTree.getRadius())) {
-            move.setAction(ActionType.STAFF);
-          } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0) {
-            double distance = self.getDistanceTo(targetTree);
-            if (distance <= self.getCastRange()) {
-              double angle = self.getAngleTo(targetTree);
-              if (Math.abs(angle) < game.getStaffSector() / 2) {
-                move.setAction(ActionType.MAGIC_MISSILE);
-                move.setCastAngle(angle);
-                move.setMinCastDistance(
-                    distance - targetTree.getRadius() + game.getMagicMissileRadius());
-              }
-            }
-          }
-        }
-
-        if (debug != null) {
-          for (LivingUnit unit : field.getAllObstacles()) {
-            debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
-          }
-          debug.drawAfterScene();
-          debug.sync();
-        }
-
-        stuck.unstuck(move);
-
-        if (debug != null) {
-          if (stuck.state == Stuck.State.STUCK) {
-            debug.showText(self.getX() - 20, self.getY() + 20, "Stuck", Color.black);
-            debug.drawAfterScene();
-          }
-        }
-        return;
-      }
-
       if (world.getTickIndex() < IDLE_TICKS) {
         move.setTurn(2 * Math.PI / IDLE_TICKS);
         if (debug != null) {
@@ -444,6 +299,15 @@ public final class MyStrategy implements Strategy {
         }
         return;
       }
+
+      Point selfPoint = new Point(self);
+      Point p1 =
+          Point.fromPolar(game.getStaffRange(), self.getAngle() + game.getStaffSector() / 2)
+              .add(selfPoint);
+      Point p2 = Point.fromPolar(game.getStaffRange(), self.getAngle()).add(selfPoint);
+      Point p3 =
+          Point.fromPolar(game.getStaffRange(), self.getAngle() - game.getStaffSector() / 2)
+              .add(selfPoint);
 
       boolean lowHP = self.getLife() < 60;
       boolean reallyLowHP = self.getLife() < 40;
@@ -471,7 +335,21 @@ public final class MyStrategy implements Strategy {
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
+      if (!lowHP) {
+        if (shootingTarget == null || bonus != null) {
+          walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
+        } else if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
+          walkTo(new Point(shootingTarget), move, selfPoint, p1, p2, p3);
+        }
+      } else if (reallyLowHP || inDanger) {
+        walkTo(field.getPreviousWaypoint(), move, selfPoint, p1, p2, p3);
+      } else {
+        walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
+      }
+
       if (shootingTarget != null) {
+        walker.turnTo(new Point(shootingTarget), move);
+
         double distance = self.getDistanceTo(shootingTarget);
         if (distance <= self.getCastRange()) {
           double angle = self.getAngleTo(shootingTarget);
@@ -482,49 +360,55 @@ public final class MyStrategy implements Strategy {
                 distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
           }
         }
-      }
 
-      if (!lowHP && shootingTarget == null) {
-        walker.turnTo(walkingTarget, move);
-        walker.goTo(walkingTarget, move);
-      } else if (!lowHP && shootingTarget != null) {
-        walker.turnTo(shootingTarget, move);
-        if (bonus != null) {
-          walker.goTo(walkingTarget, move);
-        } else if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
-          walker.goTo(shootingTarget, move);
+        int[] cooldown = self.getRemainingCooldownTicksByAction();
+        if (self.getRemainingActionCooldownTicks() == 0
+            && cooldown[ActionType.STAFF.ordinal()] == 0
+            && cooldown[ActionType.MAGIC_MISSILE.ordinal()] >= game.getWizardActionCooldownTicks()
+            && (p1.getDistanceTo(shootingTarget) < shootingTarget.getRadius()
+                || p2.getDistanceTo(shootingTarget) < shootingTarget.getRadius()
+                || p3.getDistanceTo(shootingTarget) < shootingTarget.getRadius())) {
+          move.setAction(ActionType.STAFF);
         }
-      } else if (lowHP) {
-        walker.turnTo(shootingTarget != null ? new Point(shootingTarget) : walkingTarget, move);
-        if (reallyLowHP || inDanger) {
-          walker.goTo(field.getPreviousWaypoint(), move);
-        } else {
-          walker.goTo(walkingTarget, move);
-        }
-      }
-
-      int[] cooldown = self.getRemainingCooldownTicksByAction();
-      if (self.getRemainingActionCooldownTicks() == 0
-          && cooldown[ActionType.STAFF.ordinal()] == 0
-          && cooldown[ActionType.MAGIC_MISSILE.ordinal()] >= game.getWizardActionCooldownTicks()) {
-        move.setAction(ActionType.STAFF);
       }
 
       if (debug != null) {
-        if (false) {
-          int N = 5;
-          double R = self.getCastRange() * 2 / 3;
-          for (double dx = -R; dx < R; dx += R / N) {
-            for (double dy = -R; dy < R; dy += R / N) {
-              Point point = new Point(self.getX() + dx, self.getY() + dy);
-              debug.drawCircle(point.getX(), point.getY(), 3, Color.lightGray);
-              for (Building building : world.getBuildings()) {
-                if (isEnemy(building)) {}
-              }
-            }
-          }
-          debug.drawBeforeScene();
+        debug.showText(
+            self.getX(),
+            self.getY(),
+            String.valueOf(self.getRemainingActionCooldownTicks()),
+            Color.black);
+        debug.drawAfterScene();
+
+        field
+            .getAllObstacles()
+            .stream()
+            .forEach(
+                u ->
+                    debug.drawCircle(
+                        u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
+        debug.drawAfterScene();
+
+        debug.fillCircle(p1.getX(), p1.getY(), 2, Color.red);
+        debug.fillCircle(p2.getX(), p2.getY(), 2, Color.red);
+        debug.fillCircle(p3.getX(), p3.getY(), 2, Color.red);
+        debug.drawAfterScene();
+
+        debug.drawLine(
+            self.getX(), self.getY(), walkingTarget.getX(), walkingTarget.getY(), Color.green);
+        debug.drawAfterScene();
+
+        for (LivingUnit unit : field.getAllObstacles()) {
+          debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
         }
+        debug.drawAfterScene();
+
+        if (stuck.state == Stuck.State.STUCK) {
+          debug.showText(self.getX() - 20, self.getY() + 20, "Stuck", Color.black);
+          debug.drawAfterScene();
+        }
+
+        // Old code below.
 
         if (walkingTarget != null) {
           debug.fillCircle(walkingTarget.getX(), walkingTarget.getY(), 5, Color.blue);
@@ -572,6 +456,77 @@ public final class MyStrategy implements Strategy {
 
         debug.sync();
       }
+    }
+
+    private void walkTo(
+        Point walkingTarget, Move move, Point selfPoint, Point p1, Point p2, Point p3) {
+      Point shortWalkingTarget = getShortWalkingTarget(walkingTarget);
+      Tree targetTree = getTargetTree(selfPoint, shortWalkingTarget);
+
+      walker.goTo(shortWalkingTarget, move);
+      stuck.unstuck(move);
+
+      walker.turnTo(targetTree != null ? new Point(targetTree) : shortWalkingTarget, move);
+
+      if (targetTree != null
+          && Math.abs(self.getAngleTo(targetTree)) < game.getStaffSector() / 2
+          && self.getRemainingActionCooldownTicks() == 0) {
+        int[] cooldown = self.getRemainingCooldownTicksByAction();
+
+        if (cooldown[ActionType.STAFF.ordinal()] == 0
+            && (p1.getDistanceTo(targetTree) < targetTree.getRadius()
+                || p2.getDistanceTo(targetTree) < targetTree.getRadius()
+                || p3.getDistanceTo(targetTree) < targetTree.getRadius())) {
+          move.setAction(ActionType.STAFF);
+        } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0) {
+          double distance = self.getDistanceTo(targetTree);
+          if (distance <= self.getCastRange()) {
+            double angle = self.getAngleTo(targetTree);
+            if (Math.abs(angle) < game.getStaffSector() / 2) {
+              move.setAction(ActionType.MAGIC_MISSILE);
+              move.setCastAngle(angle);
+              move.setMinCastDistance(
+                  distance - targetTree.getRadius() + game.getMagicMissileRadius());
+            }
+          }
+        }
+      }
+
+      if (debug != null) {
+        if (targetTree != null) {
+          debug.drawLine(
+              self.getX(), self.getY(), targetTree.getX(), targetTree.getY(), Color.black);
+        }
+      }
+    }
+
+    private Tree getTargetTree(Point selfPoint, Point walkingTarget) {
+      return field
+          .getSquaresOnLine(selfPoint, walkingTarget)
+          .map(s -> field.weakTrees.get(s))
+          .filter(t -> t != null)
+          .findFirst()
+          .orElse(null);
+    }
+
+    private Point getShortWalkingTarget(Point walkingTarget) {
+      List<Square> path = field.findPath(Square.containing(self), Square.containing(walkingTarget));
+
+      if (path == null) {
+        return walkingTarget;
+      }
+
+      int i = 0;
+      while (i + 1 < path.size()
+          && field
+              .getSquaresOnLine(path.get(0), path.get(i + 1))
+              .noneMatch(s -> field.walls.contains(s) || field.movingUnits.containsKey(s))) {
+        ++i;
+      }
+      if (i == 0 && 1 < path.size()) {
+        i = 1;
+      }
+      return path.get(i).getCenter();
     }
 
     private void updateObservers(Wizard self, World world, Game game) {
