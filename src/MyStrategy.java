@@ -1,11 +1,11 @@
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.SortedSet;
@@ -32,7 +32,7 @@ import model.World;
 
 public final class MyStrategy implements Strategy {
 
-  private static final int SQUARE_CRUDENESS = 30;
+  private static final int SQUARE_CRUDENESS = 20;
 
   private Brain brain;
 
@@ -292,9 +292,19 @@ public final class MyStrategy implements Strategy {
               String.valueOf(self.getRemainingActionCooldownTicks()),
               Color.black);
           debug.drawAfterScene();
+
+          field
+              .getAllObstacles()
+              .stream()
+              .forEach(
+                  u ->
+                      debug.drawCircle(
+                          u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
+          debug.drawAfterScene();
         }
 
         if (target == null
+            || field.isSquareBlocked(Square.containing(target))
             || world.getTickIndex() % 200 == 0 && oldPos.getDistanceTo(self) < 15
             || target.getDistanceTo(self) < self.getRadius()) {
           System.out.println("new target");
@@ -324,16 +334,15 @@ public final class MyStrategy implements Strategy {
           debug.drawBeforeScene();
         }
 
-        List<Square> path = field.findPath(Square.containing(self), Square.containing(target));
+        field.setPathTarget(Square.containing(target));
+        List<Square> path = field.findPath(Square.containing(self));
         if (path != null) {
-          if (debug != null) {
-            drawPath(path, Color.pink);
-            debug.drawBeforeScene();
-          }
-
           int i = 0;
           while (i + 1 < path.size() && !field.isLineBlocked(path.get(0), path.get(i + 1))) {
             ++i;
+          }
+          if (i == 0 && 1 < path.size()) {
+            i = 1;
           }
 
           walkingTarget = path.get(i).getCenter();
@@ -863,7 +872,17 @@ public final class MyStrategy implements Strategy {
     }
 
     public Stream<Square> getSquaresOnLine(Point a, Point b) {
-      return getPointsOnLine(a, b).map(p -> Square.containing(p));
+      final Square[] prev = {null};
+      return getPointsOnLine(a, b)
+          .map(p -> Square.containing(p))
+          .filter(
+              s -> {
+                if (s.equals(prev[0])) {
+                  return false;
+                }
+                prev[0] = s;
+                return true;
+              });
     }
 
     public Point getNextWaypoint() {
