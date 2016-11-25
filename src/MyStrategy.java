@@ -53,10 +53,14 @@ public final class MyStrategy implements Strategy {
 
   @Override
   public void move(Wizard self, World world, Game game, Move move) {
+    long startTime = System.nanoTime();
+
     if (brain == null) {
       brain = new Brain(self, world, game);
     }
     brain.move(self, world, game, move);
+
+    System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000 + " ms");
   }
 
   public interface Visualizer {
@@ -286,8 +290,6 @@ public final class MyStrategy implements Strategy {
     }
 
     public void move(Wizard self, World world, Game game, Move move) {
-      long startTime = System.nanoTime();
-
       updateObservers(self, world, game);
 
       if (true) {
@@ -432,8 +434,6 @@ public final class MyStrategy implements Strategy {
             debug.drawAfterScene();
           }
         }
-
-        System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000);
         return;
       }
 
@@ -572,7 +572,6 @@ public final class MyStrategy implements Strategy {
 
         debug.sync();
       }
-      System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000);
     }
 
     private void updateObservers(Wizard self, World world, Game game) {
@@ -1110,7 +1109,6 @@ public final class MyStrategy implements Strategy {
           }
         }
       }
-      System.out.println("steps = " + i);
 
       List<Square> path = new ArrayList<>();
       for (Square point = end; point != null; point = cameFrom.get(point)) {
