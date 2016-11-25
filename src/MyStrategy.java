@@ -310,8 +310,8 @@ public final class MyStrategy implements Strategy {
         }
 
         if (target == null
-            || field.isSquareBlocked(Square.containing(target))
-            || world.getTickIndex() % 200 == 0 && oldPos.getDistanceTo(self) < 15
+            || field.walls.contains(Square.containing(target))
+            //|| world.getTickIndex() % 200 == 0 && oldPos.getDistanceTo(self) < 15
             || target.getDistanceTo(self) < self.getRadius()) {
           System.out.println("new target");
           while (true) {
@@ -319,7 +319,7 @@ public final class MyStrategy implements Strategy {
                 new Point(
                     self.getX() + (random.nextDouble() * 2 - 1) * 4000,
                     self.getY() + (random.nextDouble() * 2 - 1) * 4000);
-            if (!field.isSquareBlocked(target)
+            if (!field.walls.contains(target)
                 && !(target.getX() < 0
                     || target.getY() < 0
                     || target.getX() > 4000
@@ -343,7 +343,10 @@ public final class MyStrategy implements Strategy {
         List<Square> path = field.findPath(Square.containing(self), Square.containing(target));
         if (path != null) {
           int i = 0;
-          while (i + 1 < path.size() && !field.isLineBlocked(path.get(0), path.get(i + 1))) {
+          while (i + 1 < path.size()
+              && field
+                  .getSquaresOnLine(path.get(0), path.get(i + 1))
+                  .noneMatch(s -> field.walls.contains(s) || field.movingUnits.containsKey(s))) {
             ++i;
           }
           if (i == 0 && 1 < path.size()) {
@@ -354,11 +357,7 @@ public final class MyStrategy implements Strategy {
 
           if (debug != null) {
             debug.drawLine(
-                self.getX(),
-                self.getY(),
-                path.get(i).getCenterX(),
-                path.get(i).getCenterY(),
-                Color.red);
+                self.getX(), self.getY(), walkingTarget.getX(), walkingTarget.getY(), Color.green);
             debug.drawAfterScene();
           }
         }
@@ -383,7 +382,7 @@ public final class MyStrategy implements Strategy {
         Tree targetTree =
             field
                 .getSquaresOnLine(selfPoint, walkingTarget)
-                .map(s -> field.squareToWeakTree.get(s))
+                .map(s -> field.weakTrees.get(s))
                 .filter(t -> t != null)
                 .findFirst()
                 .orElse(null);
@@ -681,6 +680,10 @@ public final class MyStrategy implements Strategy {
           .filter(m -> m.getType() == MinionType.ORC_WOODCUTTER)
           .toArray(size -> new Minion[size]);
     }
+
+    public boolean isMe(Unit unit) {
+      return unit.getId() == self.getId();
+    }
   }
 
   private abstract static class WorldObserver {
@@ -827,12 +830,15 @@ public final class MyStrategy implements Strategy {
 
   private static class Field extends WorldObserver {
 
-    private static final int WEAK_TREE_PRIORITY = -5;
-    private static final int MINION_PRIORITY = -100;
+    private static final int FIND_PATH_MAX_STEPS = 250;
+    private static final int WEAK_TREE_PRIORITY = -100;
+    private static final int MOVING_UNIT_PRIORITY = -1000;
+    private static final int FORWARD_SQUARE_PRIORITY = 1000;
 
     private final Point[] waypoints;
-    private Set<Square> blockedSquares = new HashSet<>();
-    private Map<Square, Tree> squareToWeakTree = new HashMap<>();
+    private Set<Square> walls = new HashSet<>();
+    private Map<Square, Tree> weakTrees = new HashMap<>();
+    private Map<Square, LivingUnit> movingUnits = new HashMap<>();
     private Map<Square, Integer> priority = new HashMap<>();
 
     public Field(Brain brain, Visualizer debug, Wizard self, Game game) {
@@ -857,8 +863,9 @@ public final class MyStrategy implements Strategy {
 
     @Override
     public void update() {
-      updateBlockedSquares();
+      updateWalls();
       updateWeakTrees();
+      updateMovingUnits();
       updatePriorities();
 
       if (debug != null) {
@@ -879,41 +886,38 @@ public final class MyStrategy implements Strategy {
 
     private void updatePriorities() {
       priority.clear();
-      squareToWeakTree.keySet().forEach(square -> priority.put(square, WEAK_TREE_PRIORITY));
-      Arrays.stream(world.getMinions())
-          .filter(m -> m.getFaction() != Faction.NEUTRAL)
-          .flatMap(m -> getSquaresBlockedBy(m).stream())
-          .forEach(square -> priority.put(square, MINION_PRIORITY));
+      weakTrees.keySet().forEach(square -> priority.put(square, WEAK_TREE_PRIORITY));
+      Arrays.stream(getNeighbors(Square.containing(self)))
+          .forEach(
+              square -> {
+                double angle = self.getAngleTo(square.getCenterX(), square.getCenterY());
+                if (Math.abs(angle) < Math.PI / 2) {
+                  priority.put(square, FORWARD_SQUARE_PRIORITY);
+                }
+              });
+      movingUnits.keySet().stream().forEach(square -> priority.put(square, MOVING_UNIT_PRIORITY));
     }
 
-    private void updateWeakTrees() {
-      squareToWeakTree.clear();
-      for (Tree tree : world.getTrees()) {
-        if (tree.getLife() <= game.getMagicMissileDirectDamage()) {
-          for (Square square : getSquaresBlockedBy(tree)) {
-            squareToWeakTree.put(square, tree);
-          }
-        }
-      }
-    }
-
-    private void updateBlockedSquares() {
-      blockedSquares.clear();
+    private void updateWalls() {
+      walls.clear();
       Stream.of(
               Arrays.stream(world.getTrees()),
               Arrays.stream(world.getBuildings()),
               Arrays.stream(world.getMinions()).filter(m -> m.getFaction() == Faction.NEUTRAL))
           .flatMap(Function.identity())
           .forEach(
-              (LivingUnit unit) -> {
-                if (unit.getLife() > game.getMagicMissileDirectDamage()) {
-                  blockedSquares.addAll(getSquaresBlockedBy(unit));
+              unit -> {
+                if (unit.getLife() > game.getMagicMissileDirectDamage() || brain.isAlly(unit)) {
+                  walls.addAll(getSquares(unit));
                 }
               });
-      blockedSquares.remove(Square.containing(self));
+
+      Square selfSquare = Square.containing(self);
+      walls.remove(selfSquare);
+      walls.removeAll(Arrays.asList(getNeighbors(selfSquare)));
 
       if (debug != null) {
-        for (Square square : blockedSquares) {
+        for (Square square : walls) {
           debug.fillRect(
               square.getLeftX(),
               square.getTopY(),
@@ -925,7 +929,58 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private List<Square> getSquaresBlockedBy(LivingUnit unit) {
+    private void updateWeakTrees() {
+      weakTrees.clear();
+      for (Tree tree : world.getTrees()) {
+        if (tree.getLife() <= game.getMagicMissileDirectDamage()) {
+          for (Square square : getSquares(tree)) {
+            weakTrees.put(square, tree);
+          }
+        }
+      }
+
+      if (debug != null) {
+        for (Square square : weakTrees.keySet()) {
+          debug.drawRect(
+              square.getLeftX(),
+              square.getTopY(),
+              square.getRightX(),
+              square.getBottomY(),
+              Color.pink);
+          debug.drawBeforeScene();
+        }
+      }
+    }
+
+    private void updateMovingUnits() {
+      movingUnits.clear();
+      Stream.of(Arrays.stream(world.getWizards()), Arrays.stream(world.getMinions()))
+          .flatMap(Function.identity())
+          .filter(
+              unit ->
+                  !brain.isMe(unit)
+                      && (brain.isAlly(unit)
+                          || unit.getLife() > game.getMagicMissileDirectDamage()))
+          .forEach(unit -> getSquares(unit).stream().forEach(s -> movingUnits.put(s, unit)));
+
+      if (debug != null) {
+        movingUnits
+            .keySet()
+            .stream()
+            .forEach(
+                square -> {
+                  debug.drawRect(
+                      square.getLeftX(),
+                      square.getTopY(),
+                      square.getRightX(),
+                      square.getBottomY(),
+                      Color.orange);
+                  debug.drawBeforeScene();
+                });
+      }
+    }
+
+    private List<Square> getSquares(LivingUnit unit) {
       List<Square> result = new ArrayList<>();
       double r = unit.getRadius() + self.getRadius();
       Square topLeft = Square.containing(unit.getX() - r, unit.getY() - r);
@@ -939,22 +994,6 @@ public final class MyStrategy implements Strategy {
         }
       }
       return result;
-    }
-
-    public boolean isSquareBlocked(Square square) {
-      return blockedSquares.contains(square);
-    }
-
-    public boolean isSquareBlocked(Point point) {
-      return blockedSquares.contains(Square.containing(point));
-    }
-
-    public boolean isLineBlocked(Square a, Square b) {
-      return isLineBlocked(a.getCenter(), b.getCenter());
-    }
-
-    public boolean isLineBlocked(Point a, Point b) {
-      return getSquaresOnLine(a, b).anyMatch(s -> isSquareBlocked(s));
     }
 
     public Stream<Point> getPointsOnLine(Point a, Point b) {
@@ -975,6 +1014,10 @@ public final class MyStrategy implements Strategy {
                 prev[0] = square;
                 return true;
               });
+    }
+
+    public Stream<Square> getSquaresOnLine(Square a, Square b) {
+      return getSquaresOnLine(a.getCenter(), b.getCenter());
     }
 
     public Point getNextWaypoint() {
@@ -1031,8 +1074,8 @@ public final class MyStrategy implements Strategy {
       distanceGuess.put(start, 0);
       queue.add(start);
 
-      final int MAX_STEPS = 10000;
-      for (int i = 0; !queue.isEmpty() && i < MAX_STEPS; ++i) {
+      int i = 0;
+      for (; !queue.isEmpty() && i < FIND_PATH_MAX_STEPS; ++i) {
         Square point = queue.first();
         queue.remove(point);
 
@@ -1043,7 +1086,7 @@ public final class MyStrategy implements Strategy {
 
         int distanceToPoint = distance.get(point);
         for (Square neighbor : getNeighbors(point)) {
-          if (isSquareBlocked(neighbor) || done.contains(neighbor)) {
+          if (walls.contains(neighbor) || done.contains(neighbor)) {
             continue;
           }
 
@@ -1060,6 +1103,7 @@ public final class MyStrategy implements Strategy {
           }
         }
       }
+      System.out.println("steps = " + i);
 
       List<Square> path = new ArrayList<>();
       for (Square point = end; point != null; point = cameFrom.get(point)) {
