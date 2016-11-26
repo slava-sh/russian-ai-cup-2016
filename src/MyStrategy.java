@@ -333,16 +333,24 @@ public final class MyStrategy implements Strategy {
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
       Point walkingTarget;
-      if (bonus != null) {
+      boolean inHomeArea =
+          self.getX() < world.getWidth() * 0.40 && self.getY() > world.getHeight() * 0.60;
+      if (bonus != null && (!inHomeArea || !inDanger)) {
         walkingTarget = bonus;
       } else if (factionBaseInDanger) {
-        walkingTarget = new Point(factionBase);
-      } else if (!lowHP
-          && shootingTarget != null
-          && self.getDistanceTo(shootingTarget) > self.getCastRange()) {
-        walkingTarget = new Point(shootingTarget);
-      } else if (reallyLowHP || inDanger) {
-        walkingTarget = field.getPreviousWaypoint();
+        walkingTarget = field.getFactionBaseWaypoint();
+      } else if (lowHP) {
+        if (reallyLowHP || inDanger) {
+          walkingTarget = field.getPreviousWaypoint();
+        } else {
+          walkingTarget = selfPoint;
+        }
+      } else if (shootingTarget != null) {
+        if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
+          walkingTarget = new Point(shootingTarget);
+        } else {
+          walkingTarget = selfPoint;
+        }
       } else {
         walkingTarget = field.getNextWaypoint();
       }
@@ -357,7 +365,18 @@ public final class MyStrategy implements Strategy {
       walker.goTo(shortWalkingTarget, move);
       stuck.unstuck(move);
 
-      walker.turnTo(shootingTarget != null ? new Point(shootingTarget) : shortWalkingTarget, move);
+      if (shootingTarget != null) {
+        walker.turnTo(shootingTarget, move);
+      } else if (walkingTarget != selfPoint) {
+        walker.turnTo(shortWalkingTarget, move);
+      } else {
+        LivingUnit nextShootingTarget = shooter.getTarget(self.getVisionRange() * 2);
+        if (nextShootingTarget != null) {
+          walker.turnTo(nextShootingTarget, move);
+        } else {
+          walker.turnTo(field.getNextWaypoint(), move);
+        }
+      }
 
       /*
       if (targetTree != null
@@ -1159,6 +1178,10 @@ public final class MyStrategy implements Strategy {
       units.addAll(Arrays.asList(world.getTrees()));
       return units;
     }
+
+    public Point getFactionBaseWaypoint() {
+      return waypoints[0];
+    }
   }
 
   private static class Walker extends WorldObserver {
@@ -1210,10 +1233,6 @@ public final class MyStrategy implements Strategy {
     public void turnTo(Point point, Move move) {
       double angle = self.getAngleTo(point.getX(), point.getY());
       move.setTurn(angle);
-    }
-
-    public void goTo(Unit unit, Move move) {
-      goTo(new Point(unit), move);
     }
 
     public void turnTo(Unit unit, Move move) {
