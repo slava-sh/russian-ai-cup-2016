@@ -63,6 +63,30 @@ public final class MyStrategy implements Strategy {
     return a;
   }
 
+  private static boolean distanceLessThan(Unit a, Unit b, double distance) {
+    double dx = a.getX() - b.getX();
+    double dy = a.getY() - b.getY();
+    return dx * dx + dy * dy < distance * distance;
+  }
+
+  private static boolean distanceLessThan(Unit a, Point b, double distance) {
+    double dx = a.getX() - b.getX();
+    double dy = a.getY() - b.getY();
+    return dx * dx + dy * dy < distance * distance;
+  }
+
+  private static boolean distanceLessThan(Point a, Unit b, double distance) {
+    double dx = a.getX() - b.getX();
+    double dy = a.getY() - b.getY();
+    return dx * dx + dy * dy < distance * distance;
+  }
+
+  private static boolean distanceLessThan(Point a, Point b, double distance) {
+    double dx = a.getX() - b.getX();
+    double dy = a.getY() - b.getY();
+    return dx * dx + dy * dy < distance * distance;
+  }
+
   @Override
   public void move(Wizard self, World world, Game game, Move move) {
     long startTime = DEBUG_TIME ? System.nanoTime() : 0;
@@ -410,10 +434,10 @@ public final class MyStrategy implements Strategy {
       */
 
       if (shootingTarget != null) {
-        double distance = self.getDistanceTo(shootingTarget);
-        if (distance <= self.getCastRange()) {
+        if (distanceLessThan(self, shootingTarget, self.getCastRange())) {
           double angle = self.getAngleTo(shootingTarget);
           if (Math.abs(angle) < game.getStaffSector() / 2.0D) {
+            double distance = self.getDistanceTo(shootingTarget);
             move.setAction(ActionType.MAGIC_MISSILE);
             move.setCastAngle(angle);
             move.setMinCastDistance(
@@ -425,9 +449,9 @@ public final class MyStrategy implements Strategy {
         if (self.getRemainingActionCooldownTicks() == 0
             && cooldown[ActionType.STAFF.ordinal()] == 0
             && cooldown[ActionType.MAGIC_MISSILE.ordinal()] >= game.getWizardActionCooldownTicks()
-            && (p1.getDistanceTo(shootingTarget) < shootingTarget.getRadius()
-                || p2.getDistanceTo(shootingTarget) < shootingTarget.getRadius()
-                || p3.getDistanceTo(shootingTarget) < shootingTarget.getRadius())) {
+            && (distanceLessThan(p1, shootingTarget, shootingTarget.getRadius())
+                || distanceLessThan(p2, shootingTarget, shootingTarget.getRadius())
+                || distanceLessThan(p3, shootingTarget, shootingTarget.getRadius()))) {
           move.setAction(ActionType.STAFF);
         }
       }
@@ -539,8 +563,8 @@ public final class MyStrategy implements Strategy {
 
     boolean isAllyEndangeredBy(LivingUnit ally, LivingUnit attacker) {
       return isEnemy(attacker)
-          && ally.getDistanceTo(attacker)
-              < getAttackRange(attacker) + ally.getRadius() + SAFETY_EPS;
+          && distanceLessThan(
+              ally, attacker, getAttackRange(attacker) + ally.getRadius() + SAFETY_EPS);
     }
 
     private Tree getTargetTree(Point selfPoint, Point walkingTarget) {
@@ -561,16 +585,8 @@ public final class MyStrategy implements Strategy {
           .filter(u -> isAlly(u));
     }
 
-    boolean canSee(double x, double y) {
-      return getAllies().anyMatch(ally -> ally.getDistanceTo(x, y) < getVisionRange(ally));
-    }
-
-    boolean canSee(Unit unit) {
-      return canSee(unit.getX(), unit.getY());
-    }
-
     boolean canSee(Point point) {
-      return canSee(point.getX(), point.getY());
+      return getAllies().anyMatch(ally -> distanceLessThan(ally, point, getVisionRange(ally)));
     }
 
     double getVisionRange(LivingUnit unit) {
@@ -830,7 +846,8 @@ public final class MyStrategy implements Strategy {
       }
 
       if (bonus != null && tick < nextBonusTick - BONUS_ANTICIPATION_TICKS && brain.canSee(bonus)) {
-        boolean bonusExists = Arrays.stream(world.getBonuses()).anyMatch(b -> brain.canSee(b));
+        boolean bonusExists =
+            Arrays.stream(world.getBonuses()).anyMatch(b -> brain.canSee(new Point(b)));
         if (!bonusExists) {
           if (debug != null) {
             System.out.println("bonus disappeared");
@@ -1001,7 +1018,7 @@ public final class MyStrategy implements Strategy {
       for (int p = topLeft.getP(); p <= bottomRight.getP(); ++p) {
         for (int q = topLeft.getQ(); q <= bottomRight.getQ(); ++q) {
           Square square = new Square(p, q);
-          if (unit.getDistanceTo(square.getCenterX(), square.getCenterY()) < r) {
+          if (distanceLessThan(unit, square.getCenter(), r)) {
             result.add(square);
           }
         }
@@ -1040,7 +1057,7 @@ public final class MyStrategy implements Strategy {
       for (int waypointIndex = 0; waypointIndex < lastWaypointIndex; ++waypointIndex) {
         Point waypoint = waypoints[waypointIndex];
 
-        if (waypoint.getDistanceTo(self) <= self.getRadius() * 4) {
+        if (distanceLessThan(waypoint, self, self.getRadius() * 4)) {
           return waypoints[waypointIndex + 1];
         }
 
@@ -1058,7 +1075,7 @@ public final class MyStrategy implements Strategy {
       for (int waypointIndex = waypoints.length - 1; waypointIndex > 0; --waypointIndex) {
         Point waypoint = waypoints[waypointIndex];
 
-        if (waypoint.getDistanceTo(self) <= self.getRadius() * 3) {
+        if (distanceLessThan(waypoint, self, self.getRadius() * 3)) {
           return waypoints[waypointIndex - 1];
         }
 
@@ -1282,11 +1299,13 @@ public final class MyStrategy implements Strategy {
       LivingUnit wizardTarget = getTargetHomo(world.getWizards(), range);
       LivingUnit closestWoodcutter = getClosestWoodcutter();
       if (closestWoodcutter != null
-          && self.getDistanceTo(closestWoodcutter)
-              < SAFETY_EPS
+          && distanceLessThan(
+              self,
+              closestWoodcutter,
+              SAFETY_EPS
                   + self.getRadius()
                   + closestWoodcutter.getRadius()
-                  + game.getOrcWoodcutterAttackRange()) {
+                  + game.getOrcWoodcutterAttackRange())) {
         return closestWoodcutter;
       }
       if (buildingTarget == null && wizardTarget == null) {
@@ -1327,7 +1346,7 @@ public final class MyStrategy implements Strategy {
         if (!brain.isEnemy(target)) {
           continue;
         }
-        if (self.getDistanceTo(target) > range) {
+        if (!distanceLessThan(self, target, range)) {
           continue;
         }
         if (bestTarget == null || target.getLife() < bestTarget.getLife()) {
