@@ -2,6 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/vendor/Tutorial" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/vendor/java-cgdk" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/vendor/local-runner" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/vendor/russian-ai-cup-visual" vcs="Git" />
