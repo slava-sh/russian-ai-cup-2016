@@ -357,12 +357,10 @@ public final class MyStrategy implements Strategy {
       }
       */
 
-      if (!lowHP && (shootingTarget == null || bonus != null)) {
-        if (bonus != null) {
-          walkingTarget = bonus;
-        } else {
-          walkingTarget = field.getNextWaypoint();
-        }
+      if (bonus != null) {
+        walkingTarget = bonus;
+      } else if (!lowHP && shootingTarget == null) {
+        walkingTarget = field.getNextWaypoint();
       } else if (!lowHP && self.getDistanceTo(shootingTarget) > self.getCastRange()) {
         walkingTarget = new Point(shootingTarget);
       } else if (reallyLowHP || inDanger) {
