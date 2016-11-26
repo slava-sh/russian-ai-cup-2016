@@ -38,12 +38,14 @@ public final class MyStrategy implements Strategy {
   private static final double SAFETY_EPS = 15;
 
   private static final boolean DEBUG_TIME = false;
+  private static final boolean DEBUG_DRAW_PATH = true;
   private static final boolean DEBUG_FIND_PATH = false;
   private static final boolean DEBUG_DRAW_WALLS = false;
   private static final boolean DEBUG_DRAW_WEAK_TREES = false;
   private static final boolean DEBUG_CIRCLE_OBSTACLES = false;
   private static final boolean DEBUG_DRAW_MOVING_UNITS = false;
   private static final boolean DEBUG_SHOW_OBSTACLE_HP = false;
+  private static final boolean DEBUG_SHOW_COOLDOWN_TICKS = true;
 
   private Brain brain;
 
@@ -432,10 +434,6 @@ public final class MyStrategy implements Strategy {
         debug.fillCircle(p3.getX(), p3.getY(), 2, Color.red);
         debug.drawAfterScene();
 
-        debug.drawLine(
-            self.getX(), self.getY(), walkingTarget.getX(), walkingTarget.getY(), Color.green);
-        debug.drawAfterScene();
-
         if (DEBUG_SHOW_OBSTACLE_HP) {
           for (LivingUnit unit : field.getAllObstacles()) {
             debug.showText(unit.getX(), unit.getY(), String.valueOf(unit.getLife()), Color.black);
@@ -444,14 +442,14 @@ public final class MyStrategy implements Strategy {
         }
 
         if (stuck.state == Stuck.State.STUCK) {
-          debug.showText(self.getX() - 20, self.getY() + 20, "Stuck", Color.black);
+          debug.showText(self.getX() - 20, self.getY() + 20, "Stuck", Color.red);
           debug.drawAfterScene();
         }
 
-        // Old code below.
-
         if (walkingTarget != null) {
-          debug.fillCircle(walkingTarget.getX(), walkingTarget.getY(), 5, Color.blue);
+          debug.fillCircle(walkingTarget.getX(), walkingTarget.getY(), 5, Color.green);
+          debug.drawLine(
+              self.getX(), self.getY(), walkingTarget.getX(), walkingTarget.getY(), Color.green);
           debug.drawBeforeScene();
         }
 
@@ -462,32 +460,35 @@ public final class MyStrategy implements Strategy {
           debug.drawBeforeScene();
         }
 
-        for (Building building : world.getBuildings()) {
-          debug.drawCircle(
-              building.getX(), building.getY(), building.getVisionRange(), Color.lightGray);
-          debug.drawCircle(building.getX(), building.getY(), building.getAttackRange(), Color.pink);
-          debug.drawBeforeScene();
+        if (DEBUG_SHOW_COOLDOWN_TICKS) {
+          for (Building building : world.getBuildings()) {
+            debug.drawCircle(
+                building.getX(), building.getY(), building.getVisionRange(), Color.lightGray);
+            debug.drawCircle(
+                building.getX(), building.getY(), building.getAttackRange(), Color.pink);
+            debug.drawBeforeScene();
+
+            debug.showText(
+                building.getX(),
+                building.getY() + 20,
+                String.valueOf(building.getRemainingActionCooldownTicks()),
+                Color.black);
+            debug.drawAfterScene();
+          }
 
           debug.showText(
-              building.getX(),
-              building.getY() + 20,
-              String.valueOf(building.getRemainingActionCooldownTicks()),
+              self.getX(),
+              self.getY(),
+              String.valueOf(self.getRemainingActionCooldownTicks()),
+              Color.black);
+          debug.showText(
+              self.getX(),
+              self.getY() + 20,
+              String.valueOf(
+                  self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()]),
               Color.black);
           debug.drawAfterScene();
         }
-
-        debug.showText(
-            self.getX(),
-            self.getY(),
-            String.valueOf(self.getRemainingActionCooldownTicks()),
-            Color.black);
-        debug.showText(
-            self.getX(),
-            self.getY() + 20,
-            String.valueOf(
-                self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()]),
-            Color.black);
-        debug.drawAfterScene();
 
         debug.sync();
       }
@@ -588,17 +589,30 @@ public final class MyStrategy implements Strategy {
         return walkingTarget;
       }
 
-      int i = 0;
-      while (i + 1 < path.size()
+      int shortcut = 0;
+      while (shortcut + 1 < path.size()
           && field
-              .getSquaresOnLine(path.get(0), path.get(i + 1))
+              .getSquaresOnLine(path.get(0), path.get(shortcut + 1))
               .noneMatch(s -> field.walls.contains(s) || field.movingUnits.containsKey(s))) {
-        ++i;
+        ++shortcut;
       }
-      if (i == 0 && 1 < path.size()) {
-        i = 1;
+      if (shortcut == 0 && 1 < path.size()) {
+        shortcut = 1;
       }
-      return path.get(i).getCenter();
+
+      if (debug != null && DEBUG_DRAW_PATH) {
+        for (int i = 1; i < path.size(); ++i) {
+          debug.drawLine(
+              path.get(i - 1).getCenterX(),
+              path.get(i - 1).getCenterY(),
+              path.get(i).getCenterX(),
+              path.get(i).getCenterY(),
+              DEBUG_FIND_PATH ? Color.black : Color.lightGray);
+        }
+        debug.drawBeforeScene();
+      }
+
+      return path.get(shortcut).getCenter();
     }
 
     private void updateObservers(Wizard self, World world, Game game) {
@@ -642,17 +656,6 @@ public final class MyStrategy implements Strategy {
       final int N = 10;
       for (int i = 1; i <= N; ++i) {
         debug.drawArc(x, y, radius * i / N, startAngle, arcAngle, color);
-      }
-    }
-
-    void drawPath(List<Square> path, Color color) {
-      for (int i = 1; i < path.size(); ++i) {
-        debug.drawLine(
-            path.get(i - 1).getCenterX(),
-            path.get(i - 1).getCenterY(),
-            path.get(i).getCenterX(),
-            path.get(i).getCenterY(),
-            color);
       }
     }
 
@@ -1119,9 +1122,6 @@ public final class MyStrategy implements Strategy {
               entry.getValue().getCenterY(),
               Color.lightGray);
         }
-        debug.drawBeforeScene();
-
-        brain.drawPath(path, Color.black);
         debug.drawBeforeScene();
       }
 
