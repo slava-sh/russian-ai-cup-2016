@@ -37,6 +37,7 @@ public final class MyStrategy implements Strategy {
   private static final int SQUARE_CRUDENESS = 20;
   private static final double SAFETY_EPS = 15;
 
+  private static final boolean LOAD_DEBUG_VISUALIZER = false;
   private static final boolean DEBUG_TIME = false;
   private static final boolean DEBUG_DRAW_PATH = true;
   private static final boolean DEBUG_FIND_PATH = false;
@@ -133,12 +134,14 @@ public final class MyStrategy implements Strategy {
       ENEMY_FRACTION = ALLY_FRACTION == Faction.ACADEMY ? Faction.RENEGADES : Faction.ACADEMY;
 
       Visualizer debugVisualizer = null;
-      try {
-        Class<?> clazz = Class.forName("DebugVisualizer");
-        Object instance = clazz.getConstructor().newInstance();
-        debugVisualizer = (Visualizer) instance;
-      } catch (Exception e) {
-        // Visualizer is not available.
+      if (LOAD_DEBUG_VISUALIZER) {
+        try {
+          Class<?> clazz = Class.forName("DebugVisualizer");
+          Object instance = clazz.getConstructor().newInstance();
+          debugVisualizer = (Visualizer) instance;
+        } catch (Exception e) {
+          // Visualizer is not available.
+        }
       }
       debug = debugVisualizer;
 
