@@ -1181,7 +1181,7 @@ public final class MyStrategy implements Strategy {
     }
 
     public Point getFactionBaseWaypoint() {
-      return waypoints[0];
+      return new Point(world.getWidth() * 0.15, world.getHeight() * 0.85);
     }
   }
 
