@@ -104,7 +104,6 @@ public final class MyStrategy implements Strategy {
 
   private static class Brain {
 
-    private static final int IDLE_TICKS = 0;
     private final Faction ALLY_FRACTION;
     private final Faction ENEMY_FRACTION;
 
@@ -303,14 +302,6 @@ public final class MyStrategy implements Strategy {
 
     public void move(Wizard self, World world, Game game, Move move) {
       updateObservers(self, world, game);
-
-      if (world.getTickIndex() < IDLE_TICKS) {
-        move.setTurn(2 * Math.PI / IDLE_TICKS);
-        if (debug != null) {
-          debug.sync();
-        }
-        return;
-      }
 
       Point selfPoint = new Point(self);
       Point p1 =
