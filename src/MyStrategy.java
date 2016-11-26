@@ -333,6 +333,7 @@ public final class MyStrategy implements Strategy {
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
       Point walkingTarget;
+      /*
       boolean inHomeArea =
           self.getX() < world.getWidth() * 0.40 && self.getY() > world.getHeight() * 0.60;
       if (bonus != null && (!inHomeArea || !inDanger)) {
@@ -351,6 +352,21 @@ public final class MyStrategy implements Strategy {
         } else {
           walkingTarget = selfPoint;
         }
+      } else {
+        walkingTarget = field.getNextWaypoint();
+      }
+      */
+
+      if (!lowHP && (shootingTarget == null || bonus != null)) {
+        if (bonus != null) {
+          walkingTarget = bonus;
+        } else {
+          walkingTarget = field.getNextWaypoint();
+        }
+      } else if (!lowHP && self.getDistanceTo(shootingTarget) > self.getCastRange()) {
+        walkingTarget = new Point(shootingTarget);
+      } else if (reallyLowHP || inDanger) {
+        walkingTarget = field.getPreviousWaypoint();
       } else {
         walkingTarget = field.getNextWaypoint();
       }
