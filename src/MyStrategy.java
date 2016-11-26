@@ -525,6 +525,40 @@ public final class MyStrategy implements Strategy {
           .orElse(null);
     }
 
+    Stream<LivingUnit> getAllies() {
+      return Stream.of(
+              Arrays.stream(world.getWizards()),
+              Arrays.stream(world.getBuildings()),
+              Arrays.stream(world.getMinions()))
+          .flatMap(Function.identity())
+          .filter(u -> isAlly(u));
+    }
+
+    boolean canSee(double x, double y) {
+      return getAllies().anyMatch(ally -> ally.getDistanceTo(x, y) < getVisionRange(ally));
+    }
+
+    boolean canSee(Unit unit) {
+      return canSee(unit.getX(), unit.getY());
+    }
+
+    boolean canSee(Point point) {
+      return canSee(point.getX(), point.getY());
+    }
+
+    double getVisionRange(LivingUnit unit) {
+      if (unit instanceof Wizard) {
+        return ((Wizard) unit).getVisionRange();
+      }
+      if (unit instanceof Minion) {
+        return ((Minion) unit).getVisionRange();
+      }
+      if (unit instanceof Building) {
+        return ((Building) unit).getVisionRange();
+      }
+      throw new IllegalArgumentException("unit does not have vision range");
+    }
+
     private Point getShortWalkingTarget(Point walkingTarget) {
       List<Square> path = field.findPath(Square.containing(self), Square.containing(walkingTarget));
 
@@ -606,19 +640,19 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    public Minion[] getFetishes() {
+    Minion[] getFetishes() {
       return Arrays.stream(world.getMinions())
           .filter(m -> m.getType() == MinionType.FETISH_BLOWDART)
           .toArray(size -> new Minion[size]);
     }
 
-    public Minion[] getWoodcutters() {
+    Minion[] getWoodcutters() {
       return Arrays.stream(world.getMinions())
           .filter(m -> m.getType() == MinionType.ORC_WOODCUTTER)
           .toArray(size -> new Minion[size]);
     }
 
-    public boolean isMe(Unit unit) {
+    boolean isMe(Unit unit) {
       return unit.getId() == self.getId();
     }
   }
@@ -748,12 +782,8 @@ public final class MyStrategy implements Strategy {
         bonus = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
       }
 
-      if (tick < nextBonusTick - BONUS_ANTICIPATION_TICKS
-          && bonus != null
-          && bonus.getDistanceTo(self) < self.getVisionRange()) {
-        boolean bonusExists =
-            Arrays.stream(world.getBonuses())
-                .anyMatch(b -> b.getDistanceTo(self) < self.getVisionRange());
+      if (bonus != null && tick < nextBonusTick - BONUS_ANTICIPATION_TICKS && brain.canSee(bonus)) {
+        boolean bonusExists = Arrays.stream(world.getBonuses()).anyMatch(b -> brain.canSee(b));
         if (!bonusExists) {
           if (debug != null) {
             System.out.println("bonus disappeared");
