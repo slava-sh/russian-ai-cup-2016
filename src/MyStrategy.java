@@ -332,32 +332,11 @@ public final class MyStrategy implements Strategy {
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
-      Point walkingTarget;
-      /*
       boolean inHomeArea =
           self.getX() < world.getWidth() * 0.40 && self.getY() > world.getHeight() * 0.60;
-      if (bonus != null && (!inHomeArea || !inDanger)) {
-        walkingTarget = bonus;
-      } else if (factionBaseInDanger) {
-        walkingTarget = field.getFactionBaseWaypoint();
-      } else if (lowHP) {
-        if (reallyLowHP || inDanger) {
-          walkingTarget = field.getPreviousWaypoint();
-        } else {
-          walkingTarget = selfPoint;
-        }
-      } else if (shootingTarget != null) {
-        if (self.getDistanceTo(shootingTarget) > self.getCastRange()) {
-          walkingTarget = new Point(shootingTarget);
-        } else {
-          walkingTarget = selfPoint;
-        }
-      } else {
-        walkingTarget = field.getNextWaypoint();
-      }
-      */
 
-      if (bonus != null) {
+      Point walkingTarget;
+      if (bonus != null && !(inHomeArea && inDanger)) {
         walkingTarget = bonus;
       } else if (!lowHP && shootingTarget == null) {
         walkingTarget = field.getNextWaypoint();
