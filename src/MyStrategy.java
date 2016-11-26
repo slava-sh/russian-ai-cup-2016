@@ -1230,8 +1230,6 @@ public final class MyStrategy implements Strategy {
     @Override
     protected void update() {
       if (debug != null) {
-        debug.drawCircle(self.getX(), self.getY(), self.getVisionRange(), Color.lightGray);
-        debug.drawCircle(self.getX(), self.getY(), self.getCastRange(), Color.lightGray);
         brain.drawWaves(
             self.getX(),
             self.getY(),
@@ -1240,6 +1238,7 @@ public final class MyStrategy implements Strategy {
             game.getStaffSector(),
             Color.pink);
         debug.drawBeforeScene();
+
         brain.drawWaves(
             self.getX(),
             self.getY(),
