@@ -347,12 +347,17 @@ public final class MyStrategy implements Strategy {
         walkingTarget = field.getNextWaypoint();
       }
 
-      LivingUnit targetTree = walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
+      Point shortWalkingTarget = getShortWalkingTarget(walkingTarget);
+
+      Tree targetTree = getTargetTree(selfPoint, shortWalkingTarget);
       if (targetTree != null) {
         shootingTarget = targetTree;
       }
 
-      walker.turnTo(shootingTarget != null ? new Point(shootingTarget) : walkingTarget, move);
+      walker.goTo(shortWalkingTarget, move);
+      stuck.unstuck(move);
+
+      walker.turnTo(shootingTarget != null ? new Point(shootingTarget) : shortWalkingTarget, move);
 
       /*
       if (targetTree != null
@@ -446,10 +451,18 @@ public final class MyStrategy implements Strategy {
           debug.drawAfterScene();
         }
 
+        if (shortWalkingTarget != null) {
+          debug.drawLine(
+              self.getX(),
+              self.getY(),
+              shortWalkingTarget.getX(),
+              shortWalkingTarget.getY(),
+              Color.green);
+          debug.drawBeforeScene();
+        }
+
         if (walkingTarget != null) {
           debug.fillCircle(walkingTarget.getX(), walkingTarget.getY(), 5, Color.green);
-          debug.drawLine(
-              self.getX(), self.getY(), walkingTarget.getX(), walkingTarget.getY(), Color.green);
           debug.drawBeforeScene();
         }
 
@@ -511,17 +524,6 @@ public final class MyStrategy implements Strategy {
       return isEnemy(attacker)
           && ally.getDistanceTo(attacker)
               < getAttackRange(attacker) + ally.getRadius() + SAFETY_EPS;
-    }
-
-    private Tree walkTo(
-        Point walkingTarget, Move move, Point selfPoint, Point p1, Point p2, Point p3) {
-      Point shortWalkingTarget = getShortWalkingTarget(walkingTarget);
-      Tree targetTree = getTargetTree(selfPoint, shortWalkingTarget);
-
-      walker.goTo(shortWalkingTarget, move);
-      stuck.unstuck(move);
-
-      return targetTree;
     }
 
     private Tree getTargetTree(Point selfPoint, Point walkingTarget) {
