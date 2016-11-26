@@ -839,10 +839,10 @@ public final class MyStrategy implements Strategy {
 
       waypoints =
           new Point[] {
-            new Point(100, mapSize - 100),
-            new Point(mapSize * 0.3, mapSize * 0.7),
-            new Point(mapSize * 0.6, mapSize * 0.6),
-            new Point(mapSize * 0.65, mapSize * 0.35),
+            new Point(mapSize * 0.05, mapSize * 0.95),
+            new Point(mapSize * 0.30, mapSize * 0.70),
+            new Point(mapSize * 0.60, mapSize * 0.60),
+            new Point(mapSize * 0.65, mapSize * 0.40),
             new Point(mapSize * 0.75, mapSize * 0.25),
           };
     }
