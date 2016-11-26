@@ -1272,10 +1272,7 @@ public final class MyStrategy implements Strategy {
         }
         return fetishTarget != null ? fetishTarget : woodcutterTarget;
       }
-      if (buildingTarget == null) {
-        return wizardTarget;
-      }
-      return buildingTarget;
+      return wizardTarget != null ? wizardTarget : buildingTarget;
     }
 
     private LivingUnit getClosestWoodcutter() {
