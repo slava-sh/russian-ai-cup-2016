@@ -720,7 +720,7 @@ public final class MyStrategy implements Strategy {
 
   private static class BonusFinder extends WorldObserver {
 
-    private static final int BONUS_ANTICIPATION_TICKS = 200;
+    private static final int BONUS_ANTICIPATION_TICKS = 250;
 
     private int nextBonusTick;
     private Point bonus;
