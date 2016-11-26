@@ -695,6 +695,13 @@ public final class MyStrategy implements Strategy {
     boolean isMe(Unit unit) {
       return unit.getId() == self.getId();
     }
+
+    double getAttackDamage(Wizard self) {
+      boolean empowered =
+          Arrays.stream(self.getStatuses()).anyMatch(s -> s.getType() == StatusType.EMPOWERED);
+      double multiplier = empowered ? game.getEmpoweredDamageFactor() : 1;
+      return multiplier * game.getMagicMissileDirectDamage();
+    }
   }
 
   private abstract static class WorldObserver {
@@ -1276,7 +1283,8 @@ public final class MyStrategy implements Strategy {
       LivingUnit closestWoodcutter = getClosestWoodcutter();
       if (closestWoodcutter != null
           && self.getDistanceTo(closestWoodcutter)
-              < self.getRadius() * 1.5
+              < SAFETY_EPS
+                  + self.getRadius()
                   + closestWoodcutter.getRadius()
                   + game.getOrcWoodcutterAttackRange()) {
         return closestWoodcutter;
@@ -1290,6 +1298,9 @@ public final class MyStrategy implements Strategy {
           return woodcutterTarget;
         }
         return fetishTarget != null ? fetishTarget : woodcutterTarget;
+      }
+      if (wizardTarget != null && wizardTarget.getLife() < brain.getAttackDamage(self)) {
+        return wizardTarget;
       }
       return buildingTarget != null ? buildingTarget : wizardTarget;
     }
