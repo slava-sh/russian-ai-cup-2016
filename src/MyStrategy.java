@@ -809,7 +809,9 @@ public final class MyStrategy implements Strategy {
     @Override
     public void update() {
       int tick = world.getTickIndex();
-      if (tick == nextBonusTick - BONUS_ANTICIPATION_TICKS && nextBonusTick < game.getTickCount()) {
+      if (bonus == null
+          && tick >= nextBonusTick - BONUS_ANTICIPATION_TICKS
+          && nextBonusTick < game.getTickCount()) {
         bonus =
             new Point(
                 game.getMapSize() * 0.7 - game.getBonusRadius() - self.getRadius(),
@@ -819,7 +821,7 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      if (tick == nextBonusTick) {
+      if (tick >= nextBonusTick) {
         nextBonusTick += game.getBonusAppearanceIntervalTicks();
         bonus = new Point(game.getMapSize() * 0.7, game.getMapSize() * 0.7);
       }
