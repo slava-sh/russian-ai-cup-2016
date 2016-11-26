@@ -365,6 +365,8 @@ public final class MyStrategy implements Strategy {
         walkingTarget = new Point(shootingTarget);
       } else if (reallyLowHP || inDanger) {
         walkingTarget = field.getPreviousWaypoint();
+      } else if (factionBaseInDanger) {
+        walkingTarget = field.getFactionBaseWaypoint();
       } else {
         walkingTarget = field.getNextWaypoint();
       }
