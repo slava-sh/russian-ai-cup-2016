@@ -11,7 +11,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -20,6 +19,7 @@ import java.util.stream.Stream;
 
 import model.ActionType;
 import model.Building;
+import model.BuildingType;
 import model.Faction;
 import model.Game;
 import model.LivingUnit;
@@ -35,6 +35,7 @@ import model.World;
 public final class MyStrategy implements Strategy {
 
   private static final int SQUARE_CRUDENESS = 20;
+  private static final double SAFETY_EPS = 15;
 
   private static final boolean DEBUG_TIME = false;
   private static final boolean DEBUG_FIND_PATH = false;
@@ -315,40 +316,36 @@ public final class MyStrategy implements Strategy {
       boolean lowHP = self.getLife() < 60;
       boolean reallyLowHP = self.getLife() < 40;
 
-      BiPredicate<Unit, Double> endangeredBy =
-          (u, attackRange) ->
-              isEnemy(u) && self.getDistanceTo(u) < attackRange + self.getRadius() * 1.5;
-      boolean inDanger =
-          Arrays.asList(world.getWizards())
-                  .stream()
-                  .anyMatch(w -> endangeredBy.test(w, w.getCastRange()))
-              || Arrays.asList(world.getBuildings())
-                  .stream()
-                  .anyMatch(b -> endangeredBy.test(b, b.getAttackRange()))
-              || Arrays.asList(world.getMinions())
-                  .stream()
-                  .anyMatch(m -> endangeredBy.test(m, getMinionAttackRange(m)));
-      if (inDanger && debug != null) {
+      boolean inDanger = isAllyInDanger(self);
+      if (debug != null && inDanger) {
         debug.drawCircle(self.getX(), self.getY(), self.getRadius() / 2, Color.red);
         debug.drawBeforeScene();
       }
 
+      Building factionBase = getAllyFactionBase();
+      boolean factionBaseInDanger = factionBase != null && isAllyInDanger(factionBase);
+
       Point bonus = bonusFinder.findBonus();
-      Point walkingTarget = bonus != null ? bonus : field.getNextWaypoint();
+
       LivingUnit shootingTarget =
           shooter.getTarget(lowHP ? self.getCastRange() : self.getVisionRange());
 
-      LivingUnit targetTree;
-      if (!lowHP && (shootingTarget == null || bonus != null)) {
-        targetTree = walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
-      } else if (!lowHP && self.getDistanceTo(shootingTarget) > self.getCastRange()) {
-        targetTree = walkTo(new Point(shootingTarget), move, selfPoint, p1, p2, p3);
+      Point walkingTarget;
+      if (bonus != null) {
+        walkingTarget = bonus;
+      } else if (factionBaseInDanger) {
+        walkingTarget = new Point(factionBase);
+      } else if (!lowHP
+          && shootingTarget != null
+          && self.getDistanceTo(shootingTarget) > self.getCastRange()) {
+        walkingTarget = new Point(shootingTarget);
       } else if (reallyLowHP || inDanger) {
-        targetTree = walkTo(field.getPreviousWaypoint(), move, selfPoint, p1, p2, p3);
+        walkingTarget = field.getPreviousWaypoint();
       } else {
-        targetTree = walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
+        walkingTarget = field.getNextWaypoint();
       }
 
+      LivingUnit targetTree = walkTo(walkingTarget, move, selfPoint, p1, p2, p3);
       if (targetTree != null) {
         shootingTarget = targetTree;
       }
@@ -496,6 +493,25 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    Building getAllyFactionBase() {
+      return Arrays.stream(world.getBuildings())
+          .filter(b -> isAlly(b) && b.getType() == BuildingType.FACTION_BASE)
+          .findFirst()
+          .orElse(null);
+    }
+
+    boolean isAllyInDanger(LivingUnit ally) {
+      return Arrays.stream(world.getWizards()).anyMatch(w -> isAllyEndangeredBy(ally, w))
+          || Arrays.stream(world.getBuildings()).anyMatch(b -> isAllyEndangeredBy(ally, b))
+          || Arrays.stream(world.getMinions()).anyMatch(m -> isAllyEndangeredBy(ally, m));
+    }
+
+    boolean isAllyEndangeredBy(LivingUnit ally, LivingUnit attacker) {
+      return isEnemy(attacker)
+          && ally.getDistanceTo(attacker)
+              < getAttackRange(attacker) + ally.getRadius() + SAFETY_EPS;
+    }
+
     private Tree walkTo(
         Point walkingTarget, Move move, Point selfPoint, Point p1, Point p2, Point p3) {
       Point shortWalkingTarget = getShortWalkingTarget(walkingTarget);
@@ -550,6 +566,21 @@ public final class MyStrategy implements Strategy {
       throw new IllegalArgumentException("unit does not have vision range");
     }
 
+    double getAttackRange(LivingUnit unit) {
+      if (unit instanceof Wizard) {
+        return ((Wizard) unit).getCastRange();
+      }
+      if (unit instanceof Minion) {
+        return ((Minion) unit).getType() == MinionType.FETISH_BLOWDART
+            ? game.getFetishBlowdartAttackRange()
+            : game.getOrcWoodcutterAttackRange();
+      }
+      if (unit instanceof Building) {
+        return ((Building) unit).getAttackRange();
+      }
+      throw new IllegalArgumentException("unit does not have vision range");
+    }
+
     private Point getShortWalkingTarget(Point walkingTarget) {
       List<Square> path = field.findPath(Square.containing(self), Square.containing(walkingTarget));
 
@@ -577,12 +608,6 @@ public final class MyStrategy implements Strategy {
       for (WorldObserver observer : observers) {
         observer.update(self, world, game);
       }
-    }
-
-    private double getMinionAttackRange(Minion m) {
-      return m.getType() == MinionType.FETISH_BLOWDART
-          ? game.getFetishBlowdartAttackRange()
-          : game.getOrcWoodcutterAttackRange();
     }
 
     private Tree getClosestTree(Wizard self, World world) {
