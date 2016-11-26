@@ -1,12 +1,23 @@
+NAME=latest
+HOST=127.0.0.1
+PORT=31001
+TOKEN=0000000000000000
+
+ifeq ($(NAME),latest)
+	STRATEGY_JAR=./out/strategy.jar
+else
+	STRATEGY_JAR=./strategies/$(NAME).jar
+endif
+
 strategy:
 	mkdir -p ./out/strategy
 	javac -d ./out/strategy -sourcepath ./src ./src/{Runner,DebugVisualizer}.java
-	jar cf ./out/strategy.jar -C ./out/strategy .
+	jar cf $(STRATEGY_JAR) -C ./out/strategy .
 
-strategy-no-debug: clean plugin
+strategy-no-debug: clean
 	mkdir -p ./out/strategy
 	javac -d ./out/strategy -sourcepath ./src ./src/Runner.java
-	jar cf ./out/strategy.jar -C ./out/strategy .
+	jar cf $(STRATEGY_JAR) -C ./out/strategy .
 
 plugin:
 	mkdir -p ./out/plugin
@@ -17,7 +28,7 @@ run-simulator:
 		./local-runner.properties
 
 run-strategy:
-	java -cp ./out/strategy.jar Runner
+	java -cp $(STRATEGY_JAR) Runner $(HOST) $(PORT) $(TOKEN)
 
 run-simulator-and-strategy:
 	@./run-simulator-and-strategy.sh
