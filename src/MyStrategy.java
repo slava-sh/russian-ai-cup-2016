@@ -26,6 +26,7 @@ import model.LivingUnit;
 import model.Minion;
 import model.MinionType;
 import model.Move;
+import model.SkillType;
 import model.StatusType;
 import model.Tree;
 import model.Unit;
@@ -456,6 +457,8 @@ public final class MyStrategy implements Strategy {
         }
       }
 
+      move.setSkillToLearn(getSkillToLearn());
+
       if (debug != null) {
         debug.showText(
             self.getX(),
@@ -546,6 +549,11 @@ public final class MyStrategy implements Strategy {
 
         debug.sync();
       }
+    }
+
+    private SkillType getSkillToLearn() {
+      System.out.println(self.getSkills());
+      return SkillType.SHIELD;
     }
 
     Building getAllyFactionBase() {
