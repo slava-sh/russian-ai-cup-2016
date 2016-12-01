@@ -552,8 +552,48 @@ public final class MyStrategy implements Strategy {
     }
 
     private SkillType getSkillToLearn() {
-      System.out.println(self.getSkills());
-      return SkillType.SHIELD;
+      HashSet<SkillType> done = new HashSet<>();
+      Arrays.stream(self.getSkills()).forEach(s -> done.add(s));
+      //System.out.println(done.stream().map(s -> s.toString()).collect(Collectors.joining(", ")));
+      return getSkillsToLearn().filter(s -> !done.contains(s)).findFirst().orElse(null);
+    }
+
+    private Stream<SkillType> getSkillsToLearn() {
+      Stream<SkillType> MISSILE =
+          Stream.of(
+              SkillType.RANGE_BONUS_PASSIVE_1,
+              SkillType.RANGE_BONUS_AURA_1,
+              SkillType.RANGE_BONUS_PASSIVE_2,
+              SkillType.RANGE_BONUS_AURA_2,
+              SkillType.ADVANCED_MAGIC_MISSILE);
+      Stream<SkillType> FROST_BOLD =
+          Stream.of(
+              SkillType.MAGICAL_DAMAGE_BONUS_AURA_1,
+              SkillType.MAGICAL_DAMAGE_BONUS_PASSIVE_2,
+              SkillType.MAGICAL_DAMAGE_BONUS_AURA_2,
+              SkillType.FROST_BOLT);
+      Stream<SkillType> FIREBALL =
+          Stream.of(
+              SkillType.STAFF_DAMAGE_BONUS_PASSIVE_1,
+              SkillType.STAFF_DAMAGE_BONUS_AURA_1,
+              SkillType.STAFF_DAMAGE_BONUS_PASSIVE_2,
+              SkillType.STAFF_DAMAGE_BONUS_AURA_2,
+              SkillType.FIREBALL);
+      Stream<SkillType> HASTE =
+          Stream.of(
+              SkillType.MOVEMENT_BONUS_FACTOR_PASSIVE_1,
+              SkillType.MOVEMENT_BONUS_FACTOR_AURA_1,
+              SkillType.MOVEMENT_BONUS_FACTOR_PASSIVE_2,
+              SkillType.MOVEMENT_BONUS_FACTOR_AURA_2,
+              SkillType.HASTE);
+      Stream<SkillType> SHIELD =
+          Stream.of(
+              SkillType.MAGICAL_DAMAGE_ABSORPTION_PASSIVE_1,
+              SkillType.MAGICAL_DAMAGE_ABSORPTION_AURA_1,
+              SkillType.MAGICAL_DAMAGE_ABSORPTION_PASSIVE_2,
+              SkillType.MAGICAL_DAMAGE_ABSORPTION_AURA_2,
+              SkillType.SHIELD);
+      return Stream.of(SHIELD, HASTE, FROST_BOLD, FIREBALL, MISSILE).flatMap(Function.identity());
     }
 
     Building getAllyFactionBase() {
