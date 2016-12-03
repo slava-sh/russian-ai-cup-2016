@@ -401,6 +401,7 @@ public final class MyStrategy implements Strategy {
         if (cooldown[ActionType.STAFF.ordinal()] == 0 && shooter.staffCanReach(shootingTarget)) {
           move.setAction(ActionType.STAFF);
         } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0
+            && self.getMana() >= game.getMagicMissileManacost()
             && distanceLessThan(self, shootingTarget, self.getCastRange())) {
           double angle = self.getAngleTo(shootingTarget);
           if (Math.abs(angle) < game.getStaffSector() / 2.0D) {
@@ -410,6 +411,18 @@ public final class MyStrategy implements Strategy {
             move.setMinCastDistance(
                 distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
           }
+        } else if (skiller.hasSkill(SkillType.SHIELD)
+            && cooldown[ActionType.SHIELD.ordinal()] == 0
+            && self.getMana() >= game.getShieldManacost()
+            && Arrays.stream(self.getStatuses())
+                .noneMatch(s -> s.getType() == StatusType.SHIELDED)) {
+          move.setAction(ActionType.SHIELD);
+        } else if (skiller.hasSkill(SkillType.HASTE)
+            && cooldown[ActionType.HASTE.ordinal()] == 0
+            && self.getMana() >= game.getHasteManacost()
+            && Arrays.stream(self.getStatuses())
+                .noneMatch(s -> s.getType() == StatusType.HASTENED)) {
+          move.setAction(ActionType.HASTE);
         }
       }
 
@@ -1260,18 +1273,24 @@ public final class MyStrategy implements Strategy {
       SkillType.SHIELD,
     };
 
+    private HashSet<SkillType> mySkills = new HashSet<>();
+
     public Skiller(Brain brain, Visualizer debug) {
       super(brain, debug);
     }
 
-    public SkillType getSkillToLearn() {
-      HashSet<SkillType> done = new HashSet<>();
-      Arrays.stream(self.getSkills()).forEach(s -> done.add(s));
-      return getSkillsToLearn().filter(s -> !done.contains(s)).findFirst().orElse(null);
+    @Override
+    protected void update() {
+      mySkills.clear();
+      Arrays.stream(self.getSkills()).forEach(s -> mySkills.add(s));
     }
 
-    private Stream<SkillType> getSkillsToLearn() {
-      return Stream.of(SHIELD, HASTE, FROST_BOLD, FIREBALL, MISSILE).flatMap(Arrays::stream);
+    public SkillType getSkillToLearn() {
+      return Stream.of(SHIELD, HASTE, FROST_BOLD, FIREBALL, MISSILE)
+          .flatMap(Arrays::stream)
+          .filter(s -> !mySkills.contains(s))
+          .findFirst()
+          .orElse(null);
     }
 
     public void maybeLearnSkill(Move move) {
@@ -1282,6 +1301,10 @@ public final class MyStrategy implements Strategy {
         debug.showText(10, 10, "Next skill: " + nextSkill, Color.black);
         debug.drawAbsolute();
       }
+    }
+
+    public boolean hasSkill(SkillType skill) {
+      return mySkills.contains(skill);
     }
   }
 
