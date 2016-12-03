@@ -1346,9 +1346,6 @@ public final class MyStrategy implements Strategy {
             self.getAngle() - game.getStaffSector() / 2,
             game.getStaffSector(),
             Color.red);
-        debug.fillCircle(staff1.getX(), staff1.getY(), 2, Color.red);
-        debug.fillCircle(staff2.getX(), staff2.getY(), 2, Color.red);
-        debug.fillCircle(staff3.getX(), staff3.getY(), 2, Color.red);
         debug.drawAfterScene();
       }
     }
