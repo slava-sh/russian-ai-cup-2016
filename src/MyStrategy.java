@@ -399,19 +399,17 @@ public final class MyStrategy implements Strategy {
 
       if (shootingTarget != null && self.getRemainingActionCooldownTicks() == 0) {
         int[] cooldown = self.getRemainingCooldownTicksByAction();
+        double angle = self.getAngleTo(shootingTarget);
         if (cooldown[ActionType.STAFF.ordinal()] == 0 && shooter.staffCanReach(shootingTarget)) {
           move.setAction(ActionType.STAFF);
         } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0
             && self.getMana() >= game.getMagicMissileManacost()
-            && distanceLessThan(self, shootingTarget, self.getCastRange())) {
-          double angle = self.getAngleTo(shootingTarget);
-          if (Math.abs(angle) < game.getStaffSector() / 2.0D) {
-            double distance = self.getDistanceTo(shootingTarget);
-            move.setAction(ActionType.MAGIC_MISSILE);
-            move.setCastAngle(angle);
-            move.setMinCastDistance(
-                distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
-          }
+            && shooter.missileCanReach(shootingTarget)) {
+          double distance = self.getDistanceTo(shootingTarget);
+          move.setAction(ActionType.MAGIC_MISSILE);
+          move.setCastAngle(angle);
+          move.setMinCastDistance(
+              distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
         } else if (skiller.hasSkill(SkillType.SHIELD)
             && cooldown[ActionType.SHIELD.ordinal()] == 0
             && self.getMana() >= game.getShieldManacost()
@@ -1351,10 +1349,16 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    public boolean missileCanReach(LivingUnit target) {
+      return Math.abs(self.getAngleTo(target)) < game.getStaffSector() / 2
+          && distanceLessThan(self, target, self.getCastRange());
+    }
+
     public boolean staffCanReach(LivingUnit target) {
-      return distanceLessThan(staff1, target, target.getRadius())
-          || distanceLessThan(staff2, target, target.getRadius())
-          || distanceLessThan(staff3, target, target.getRadius());
+      return Math.abs(self.getAngleTo(target)) < game.getStaffSector() / 2
+          && (distanceLessThan(staff1, target, target.getRadius())
+              || distanceLessThan(staff2, target, target.getRadius())
+              || distanceLessThan(staff3, target, target.getRadius()));
     }
 
     public LivingUnit getTarget(double range) {
