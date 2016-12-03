@@ -1,0 +1,12 @@
+[submodule "vendor/Tutorial"]
+	path = vendor/Tutorial
+	url = git@github.com:Russian-AI-Cup-2016/Tutorial.git
+[submodule "vendor/java-cgdk"]
+	path = vendor/java-cgdk
+	url = git@github.com:Russian-AI-Cup-2016/java-cgdk-ru.git
+[submodule "vendor/local-runner"]
+	path = vendor/local-runner
+	url = git@github.com:Russian-AI-Cup-2016/local-runner-ru.git
+[submodule "vendor/russian-ai-cup-visual"]
+	path = vendor/russian-ai-cup-visual
+	url = git@github.com:JustAMan/russian-ai-cup-visual.git
