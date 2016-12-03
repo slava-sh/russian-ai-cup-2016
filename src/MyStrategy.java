@@ -144,11 +144,10 @@ public final class MyStrategy implements Strategy {
     private final Field field;
     private final Walker walker;
     private final Shooter shooter;
+    private final Skiller skiller;
     protected Wizard self;
     protected World world;
     protected Game game;
-
-    private Tree targetTree;
 
     public Brain(Wizard self, World world, Game game) {
       this.self = self;
@@ -188,6 +187,9 @@ public final class MyStrategy implements Strategy {
 
       shooter = new Shooter(this, debug);
       observers.add(shooter);
+
+      skiller = new Skiller(this, debug);
+      observers.add(skiller);
 
       if (debug != null) {
         printGameParameters();
@@ -411,7 +413,7 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      move.setSkillToLearn(getSkillToLearn());
+      skiller.maybeLearnSkill(move);
 
       if (debug != null) {
         debug.showText(
@@ -498,51 +500,6 @@ public final class MyStrategy implements Strategy {
 
         debug.sync();
       }
-    }
-
-    private SkillType getSkillToLearn() {
-      HashSet<SkillType> done = new HashSet<>();
-      Arrays.stream(self.getSkills()).forEach(s -> done.add(s));
-      //System.out.println(done.stream().map(s -> s.toString()).collect(Collectors.joining(", ")));
-      return getSkillsToLearn().filter(s -> !done.contains(s)).findFirst().orElse(null);
-    }
-
-    private Stream<SkillType> getSkillsToLearn() {
-      Stream<SkillType> MISSILE =
-          Stream.of(
-              SkillType.RANGE_BONUS_PASSIVE_1,
-              SkillType.RANGE_BONUS_AURA_1,
-              SkillType.RANGE_BONUS_PASSIVE_2,
-              SkillType.RANGE_BONUS_AURA_2,
-              SkillType.ADVANCED_MAGIC_MISSILE);
-      Stream<SkillType> FROST_BOLD =
-          Stream.of(
-              SkillType.MAGICAL_DAMAGE_BONUS_AURA_1,
-              SkillType.MAGICAL_DAMAGE_BONUS_PASSIVE_2,
-              SkillType.MAGICAL_DAMAGE_BONUS_AURA_2,
-              SkillType.FROST_BOLT);
-      Stream<SkillType> FIREBALL =
-          Stream.of(
-              SkillType.STAFF_DAMAGE_BONUS_PASSIVE_1,
-              SkillType.STAFF_DAMAGE_BONUS_AURA_1,
-              SkillType.STAFF_DAMAGE_BONUS_PASSIVE_2,
-              SkillType.STAFF_DAMAGE_BONUS_AURA_2,
-              SkillType.FIREBALL);
-      Stream<SkillType> HASTE =
-          Stream.of(
-              SkillType.MOVEMENT_BONUS_FACTOR_PASSIVE_1,
-              SkillType.MOVEMENT_BONUS_FACTOR_AURA_1,
-              SkillType.MOVEMENT_BONUS_FACTOR_PASSIVE_2,
-              SkillType.MOVEMENT_BONUS_FACTOR_AURA_2,
-              SkillType.HASTE);
-      Stream<SkillType> SHIELD =
-          Stream.of(
-              SkillType.MAGICAL_DAMAGE_ABSORPTION_PASSIVE_1,
-              SkillType.MAGICAL_DAMAGE_ABSORPTION_AURA_1,
-              SkillType.MAGICAL_DAMAGE_ABSORPTION_PASSIVE_2,
-              SkillType.MAGICAL_DAMAGE_ABSORPTION_AURA_2,
-              SkillType.SHIELD);
-      return Stream.of(SHIELD, HASTE, FROST_BOLD, FIREBALL, MISSILE).flatMap(Function.identity());
     }
 
     Building getAllyFactionBase() {
@@ -1259,6 +1216,72 @@ public final class MyStrategy implements Strategy {
 
     public void turnTo(Unit unit, Move move) {
       turnTo(new Point(unit), move);
+    }
+  }
+
+  private static class Skiller extends WorldObserver {
+
+    private SkillType[] MISSILE = {
+      SkillType.RANGE_BONUS_PASSIVE_1,
+      SkillType.RANGE_BONUS_AURA_1,
+      SkillType.RANGE_BONUS_PASSIVE_2,
+      SkillType.RANGE_BONUS_AURA_2,
+      SkillType.ADVANCED_MAGIC_MISSILE,
+    };
+
+    private SkillType[] FROST_BOLD = {
+      SkillType.MAGICAL_DAMAGE_BONUS_AURA_1,
+      SkillType.MAGICAL_DAMAGE_BONUS_PASSIVE_2,
+      SkillType.MAGICAL_DAMAGE_BONUS_AURA_2,
+      SkillType.FROST_BOLT,
+    };
+
+    private SkillType[] FIREBALL = {
+      SkillType.STAFF_DAMAGE_BONUS_PASSIVE_1,
+      SkillType.STAFF_DAMAGE_BONUS_AURA_1,
+      SkillType.STAFF_DAMAGE_BONUS_PASSIVE_2,
+      SkillType.STAFF_DAMAGE_BONUS_AURA_2,
+      SkillType.FIREBALL,
+    };
+
+    private SkillType[] HASTE = {
+      SkillType.MOVEMENT_BONUS_FACTOR_PASSIVE_1,
+      SkillType.MOVEMENT_BONUS_FACTOR_AURA_1,
+      SkillType.MOVEMENT_BONUS_FACTOR_PASSIVE_2,
+      SkillType.MOVEMENT_BONUS_FACTOR_AURA_2,
+      SkillType.HASTE,
+    };
+
+    private SkillType[] SHIELD = {
+      SkillType.MAGICAL_DAMAGE_ABSORPTION_PASSIVE_1,
+      SkillType.MAGICAL_DAMAGE_ABSORPTION_AURA_1,
+      SkillType.MAGICAL_DAMAGE_ABSORPTION_PASSIVE_2,
+      SkillType.MAGICAL_DAMAGE_ABSORPTION_AURA_2,
+      SkillType.SHIELD,
+    };
+
+    public Skiller(Brain brain, Visualizer debug) {
+      super(brain, debug);
+    }
+
+    public SkillType getSkillToLearn() {
+      HashSet<SkillType> done = new HashSet<>();
+      Arrays.stream(self.getSkills()).forEach(s -> done.add(s));
+      return getSkillsToLearn().filter(s -> !done.contains(s)).findFirst().orElse(null);
+    }
+
+    private Stream<SkillType> getSkillsToLearn() {
+      return Stream.of(SHIELD, HASTE, FROST_BOLD, FIREBALL, MISSILE).flatMap(Arrays::stream);
+    }
+
+    public void maybeLearnSkill(Move move) {
+      SkillType nextSkill = getSkillToLearn();
+      move.setSkillToLearn(nextSkill);
+
+      if (debug != null) {
+        debug.showText(10, 10, "Next skill: " + nextSkill, Color.black);
+        debug.drawAbsolute();
+      }
     }
   }
 
