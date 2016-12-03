@@ -39,7 +39,7 @@ public final class MyStrategy implements Strategy {
   private static final double SAFETY_EPS = 15;
 
   private static final boolean PRINT_MOVE_TIME = false;
-  private static final boolean LOAD_DEBUG_VISUALIZER = false;
+  private static final boolean LOAD_DEBUG_VISUALIZER = true;
   private static final boolean DEBUG_DRAW_PATH = true;
   private static final boolean DEBUG_FIND_PATH = false;
   private static final boolean DEBUG_DRAW_WALLS = false;
@@ -146,6 +146,7 @@ public final class MyStrategy implements Strategy {
     private final Walker walker;
     private final Shooter shooter;
     private final Skiller skiller;
+    private final List<Point> trace = new LinkedList<>();
     protected Wizard self;
     protected World world;
     protected Game game;
@@ -431,12 +432,59 @@ public final class MyStrategy implements Strategy {
       skiller.maybeLearnSkill(move);
 
       if (debug != null) {
+        trace.add(selfPoint);
+        if (trace.size() == 200) {
+          trace.remove(0);
+        }
+        trace.forEach(
+            p -> {
+              debug.fillCircle(p.getX(), p.getY(), 1, Color.green);
+              debug.drawBeforeScene();
+            });
+
         debug.showText(
             self.getX(),
             self.getY(),
             String.valueOf(self.getRemainingActionCooldownTicks()),
             Color.black);
         debug.drawAfterScene();
+
+        final int T = 10;
+        Arrays.stream(world.getProjectiles())
+            .forEach(
+                p -> {
+                  debug.drawCircle(p.getX(), p.getY(), p.getRadius(), Color.black);
+                  debug.drawLine(
+                      p.getX(),
+                      p.getY(),
+                      p.getX() + p.getSpeedX() * T,
+                      p.getY() + p.getSpeedY() * T,
+                      Color.black);
+                  debug.drawAfterScene();
+                });
+
+        for (int i = 0; i < 4; ++i) {
+          double angle = self.getAngle() + i * Math.PI / 2;
+          {
+            Point speed = Point.fromPolar(game.getWizardForwardSpeed(), angle);
+            debug.drawLine(
+                self.getX(),
+                self.getY(),
+                self.getX() + speed.getX() * T,
+                self.getY() + speed.getY() * T,
+                Color.red);
+          }
+          {
+            Point speed = Point.fromPolar(game.getWizardStrafeSpeed(), angle);
+            debug.drawLine(
+                self.getX(),
+                self.getY(),
+                self.getX() + speed.getX() * T,
+                self.getY() + speed.getY() * T,
+                Color.black);
+          }
+          debug.drawBeforeScene();
+        }
 
         if (DEBUG_CIRCLE_OBSTACLES) {
           field
