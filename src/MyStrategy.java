@@ -39,7 +39,7 @@ public final class MyStrategy implements Strategy {
   private static final double SAFETY_EPS = 15;
 
   private static final boolean PRINT_MOVE_TIME = false;
-  private static final boolean LOAD_DEBUG_VISUALIZER = false;
+  private static final boolean LOAD_DEBUG_VISUALIZER = true;
   private static final boolean DEBUG_DRAW_PATH = true;
   private static final boolean DEBUG_FIND_PATH = false;
   private static final boolean DEBUG_DRAW_WALLS = false;
@@ -86,6 +86,10 @@ public final class MyStrategy implements Strategy {
     double dx = a.getX() - b.getX();
     double dy = a.getY() - b.getY();
     return dx * dx + dy * dy < distance * distance;
+  }
+
+  private static double lerp(double a, double b, double t) {
+    return a + (b - a) * t;
   }
 
   @Override
@@ -146,6 +150,8 @@ public final class MyStrategy implements Strategy {
     private final Walker walker;
     private final Shooter shooter;
     private final Skiller skiller;
+    private final ImpactMap damageMap;
+    private final Tracker tracker;
     protected Wizard self;
     protected World world;
     protected Game game;
@@ -174,6 +180,9 @@ public final class MyStrategy implements Strategy {
 
       observers = new ArrayList<>();
 
+      tracker = new Tracker(this, debug, world);
+      observers.add(tracker);
+
       stuck = new Stuck(this, debug, random);
       observers.add(stuck);
 
@@ -182,6 +191,9 @@ public final class MyStrategy implements Strategy {
 
       field = new Field(this, debug, self, game);
       observers.add(field);
+
+      damageMap = new ImpactMap(this, debug);
+      observers.add(damageMap);
 
       walker = new Walker(this, debug);
       observers.add(walker);
@@ -679,11 +691,23 @@ public final class MyStrategy implements Strategy {
       return unit.getId() == self.getId();
     }
 
-    double getAttackDamage(Wizard self) {
+    double getAttackDamage(Wizard wizard) {
       boolean empowered =
-          Arrays.stream(self.getStatuses()).anyMatch(s -> s.getType() == StatusType.EMPOWERED);
+          Arrays.stream(wizard.getStatuses()).anyMatch(s -> s.getType() == StatusType.EMPOWERED);
       double multiplier = empowered ? game.getEmpoweredDamageFactor() : 1;
       return multiplier * game.getMagicMissileDirectDamage();
+    }
+
+    double getAttackDamage(Building building) {
+      return building.getType() == BuildingType.GUARDIAN_TOWER
+          ? game.getGuardianTowerDamage()
+          : game.getFactionBaseDamage();
+    }
+
+    double getAttackDamage(Minion minion) {
+      return minion.getType() == MinionType.FETISH_BLOWDART
+          ? game.getDartDirectDamage()
+          : game.getOrcWoodcutterDamage();
     }
   }
 
@@ -708,6 +732,190 @@ public final class MyStrategy implements Strategy {
     }
 
     protected void update() {}
+  }
+
+  private static class Tracker extends WorldObserver {
+
+    private List<Building> enemyBuildings;
+
+    public Tracker(Brain brain, Visualizer debug, World world) {
+      super(brain, debug);
+
+      enemyBuildings =
+          Arrays.stream(world.getBuildings())
+              .filter(brain::isAlly)
+              .map(
+                  b ->
+                      new Building(
+                          0,
+                          world.getWidth() - b.getX(),
+                          world.getHeight() - b.getY(),
+                          b.getSpeedX(),
+                          b.getSpeedY(),
+                          b.getAngle(),
+                          brain.ENEMY_FRACTION,
+                          b.getRadius(),
+                          b.getLife(),
+                          b.getMaxLife(),
+                          b.getStatuses(),
+                          b.getType(),
+                          b.getVisionRange(),
+                          b.getAttackRange(),
+                          b.getDamage(),
+                          b.getCooldownTicks(),
+                          b.getRemainingActionCooldownTicks()))
+              .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    public List<Building> getEnemyBuildings() {
+      return enemyBuildings;
+    }
+  }
+
+  private static class ImpactMap extends WorldObserver {
+
+    private double[][] map;
+
+    public ImpactMap(Brain brain, Visualizer debug) {
+      super(brain, debug);
+    }
+
+    @Override
+    protected void update() {
+      Square maxSquare = Square.containing(world.getWidth(), world.getHeight());
+      map = new double[maxSquare.getW() + 1][maxSquare.getH() + 1];
+
+      brain
+          .tracker
+          .getEnemyBuildings()
+          .forEach(
+              b -> {
+                brain
+                    .field
+                    .getSquares(b, b.getAttackRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          double t =
+                              1
+                                  - (double) b.getRemainingActionCooldownTicks()
+                                      / b.getCooldownTicks();
+                          map[s.getW()][s.getH()] += lerp(0, brain.getAttackDamage(b), t);
+                        });
+              });
+
+      Arrays.stream(world.getWizards())
+          .filter(brain::isEnemy)
+          .forEach(
+              w -> {
+                brain
+                    .field
+                    .getSquares(w, w.getCastRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          map[s.getW()][s.getH()] += game.getMagicMissileDirectDamage();
+                        });
+                brain
+                    .field
+                    .getSquares(w, game.getStaffRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          map[s.getW()][s.getH()] += game.getStaffDamage();
+                        });
+              });
+
+      Arrays.stream(world.getMinions())
+          .filter(brain::isEnemy)
+          .forEach(
+              m -> {
+                brain
+                    .field
+                    .getSquares(m, brain.getAttackRange(m) + self.getRadius())
+                    .forEach(
+                        s -> {
+                          map[s.getW()][s.getH()] += brain.getAttackDamage(m);
+                        });
+              });
+
+      Arrays.stream(world.getBuildings())
+          .filter(brain::isAlly)
+          .forEach(
+              b -> {
+                brain
+                    .field
+                    .getSquares(b, b.getAttackRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          double t =
+                              1
+                                  - (double) b.getRemainingActionCooldownTicks()
+                                      / b.getCooldownTicks();
+                          map[s.getW()][s.getH()] -= lerp(0, brain.getAttackDamage(b), t);
+                        });
+              });
+
+      Arrays.stream(world.getWizards())
+          .filter(brain::isAlly)
+          .filter(w -> !w.isMe())
+          .forEach(
+              w -> {
+                brain
+                    .field
+                    .getSquares(w, w.getCastRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          map[s.getW()][s.getH()] -= game.getMagicMissileDirectDamage();
+                        });
+                brain
+                    .field
+                    .getSquares(w, game.getStaffRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          map[s.getW()][s.getH()] -= game.getStaffDamage();
+                        });
+              });
+
+      Arrays.stream(world.getMinions())
+          .filter(brain::isAlly)
+          .forEach(
+              m -> {
+                brain
+                    .field
+                    .getSquares(m, brain.getAttackRange(m) + self.getRadius())
+                    .forEach(
+                        s -> {
+                          map[s.getW()][s.getH()] -= brain.getAttackDamage(m);
+                        });
+              });
+
+      if (debug != null) {
+        double minImpact = -1;
+        double maxImpact = 1;
+        for (int w = 0; w < map.length; ++w) {
+          for (int h = 0; h < map[w].length; h++) {
+            minImpact = Math.min(minImpact, map[w][h]);
+            maxImpact = Math.max(maxImpact, map[w][h]);
+          }
+        }
+        double impactRange = Math.max(Math.abs(minImpact), Math.abs(maxImpact));
+
+        for (int w = 0; w < map.length; ++w) {
+          for (int h = 0; h < map[w].length; h++) {
+            Square s = new Square(w, h);
+            if (!distanceLessThan(self, s.getCenter(), self.getVisionRange() * 2)) {
+              continue;
+            }
+            double alpha = map[w][h] / impactRange;
+            debug.fillRect(
+                s.getLeftX(),
+                s.getTopY(),
+                s.getRightX(),
+                s.getBottomY(),
+                Color.getHSBColor(alpha > 0 ? 0f : 0.3f, (float) Math.abs(alpha), 1f));
+          }
+        }
+        debug.drawBeforeScene();
+      }
+    }
   }
 
   private static class Stuck extends WorldObserver {
@@ -907,7 +1115,7 @@ public final class MyStrategy implements Strategy {
           .forEach(
               unit -> {
                 if (unit.getLife() > game.getMagicMissileDirectDamage() || brain.isAlly(unit)) {
-                  walls.addAll(getSquares(unit));
+                  walls.addAll(getSquares(unit, unit.getRadius() + self.getRadius()));
                 }
               });
 
@@ -932,7 +1140,7 @@ public final class MyStrategy implements Strategy {
       weakTrees.clear();
       for (Tree tree : world.getTrees()) {
         if (tree.getLife() <= game.getMagicMissileDirectDamage()) {
-          for (Square square : getSquares(tree)) {
+          for (Square square : getSquares(tree, tree.getRadius() + self.getRadius())) {
             weakTrees.put(square, tree);
           }
         }
@@ -960,7 +1168,11 @@ public final class MyStrategy implements Strategy {
                   !brain.isMe(unit)
                       && (brain.isAlly(unit)
                           || unit.getLife() > game.getMagicMissileDirectDamage()))
-          .forEach(unit -> getSquares(unit).stream().forEach(s -> movingUnits.put(s, unit)));
+          .forEach(
+              unit ->
+                  getSquares(unit, unit.getRadius() + self.getRadius())
+                      .stream()
+                      .forEach(s -> movingUnits.put(s, unit)));
 
       if (debug != null && DEBUG_DRAW_MOVING_UNITS) {
         movingUnits
@@ -979,13 +1191,17 @@ public final class MyStrategy implements Strategy {
       }
     }
 
-    private List<Square> getSquares(LivingUnit unit) {
+    private List<Square> getSquares(LivingUnit unit, double r) {
       List<Square> result = new ArrayList<>();
-      double r = unit.getRadius() + self.getRadius();
       Square topLeft = Square.containing(unit.getX() - r, unit.getY() - r);
       Square bottomRight = Square.containing(unit.getX() + r, unit.getY() + r);
-      for (int p = topLeft.getP(); p <= bottomRight.getP(); ++p) {
-        for (int q = topLeft.getQ(); q <= bottomRight.getQ(); ++q) {
+      Square maxSquare = Square.containing(world.getWidth(), world.getHeight());
+      for (int p = Math.max(0, topLeft.getW());
+          p <= bottomRight.getW() && p <= maxSquare.getW();
+          ++p) {
+        for (int q = Math.max(0, topLeft.getH());
+            q <= bottomRight.getH() && q <= maxSquare.getH();
+            ++q) {
           Square square = new Square(p, q);
           if (distanceLessThan(unit, square.getCenter(), r)) {
             result.add(square);
@@ -1144,8 +1360,8 @@ public final class MyStrategy implements Strategy {
     }
 
     private Square[] getNeighbors(Square square) {
-      int p = square.getP();
-      int q = square.getQ();
+      int p = square.getW();
+      int q = square.getH();
       return new Square[] {
         new Square(p - 1, q),
         new Square(p, q - 1),
@@ -1159,8 +1375,8 @@ public final class MyStrategy implements Strategy {
     }
 
     private int squaredDistance(Square a, Square b) {
-      return (a.getP() - b.getP()) * (a.getP() - b.getP())
-          + (a.getQ() - b.getQ()) * (a.getQ() - b.getQ());
+      return (a.getW() - b.getW()) * (a.getW() - b.getW())
+          + (a.getH() - b.getH()) * (a.getH() - b.getH());
     }
 
     List<LivingUnit> getAllObstacles() {
@@ -1546,12 +1762,12 @@ public final class MyStrategy implements Strategy {
 
   private static class Square {
 
-    private final int p;
-    private final int q;
+    private final int w;
+    private final int h;
 
-    public Square(int p, int q) {
-      this.p = p;
-      this.q = q;
+    public Square(int w, int h) {
+      this.w = w;
+      this.h = h;
     }
 
     public static Square containing(double x, double y) {
@@ -1570,7 +1786,7 @@ public final class MyStrategy implements Strategy {
 
     @Override
     public String toString() {
-      return "Square{" + p + ", " + q + '}';
+      return "Square{" + w + ", " + h + '}';
     }
 
     @Override
@@ -1578,29 +1794,29 @@ public final class MyStrategy implements Strategy {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       Square square = (Square) o;
-      if (p != square.p) return false;
-      return q == square.q;
+      if (w != square.w) return false;
+      return h == square.h;
     }
 
     @Override
     public int hashCode() {
-      return p * 100000 + q;
+      return w * 100000 + h;
     }
 
-    public int getP() {
-      return p;
+    public int getW() {
+      return w;
     }
 
-    public int getQ() {
-      return q;
+    public int getH() {
+      return h;
     }
 
     public double getCenterX() {
-      return (p + 0.5) * SQUARE_CRUDENESS;
+      return (w + 0.5) * SQUARE_CRUDENESS;
     }
 
     public double getCenterY() {
-      return (q + 0.5) * SQUARE_CRUDENESS;
+      return (h + 0.5) * SQUARE_CRUDENESS;
     }
 
     public Point getCenter() {
@@ -1608,19 +1824,19 @@ public final class MyStrategy implements Strategy {
     }
 
     public double getLeftX() {
-      return p * SQUARE_CRUDENESS;
+      return w * SQUARE_CRUDENESS;
     }
 
     public double getRightX() {
-      return (p + 1) * SQUARE_CRUDENESS;
+      return (w + 1) * SQUARE_CRUDENESS;
     }
 
     public double getTopY() {
-      return q * SQUARE_CRUDENESS;
+      return h * SQUARE_CRUDENESS;
     }
 
     public double getBottomY() {
-      return (q + 1) * SQUARE_CRUDENESS;
+      return (h + 1) * SQUARE_CRUDENESS;
     }
   }
 }
