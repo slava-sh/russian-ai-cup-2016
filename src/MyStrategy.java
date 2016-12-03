@@ -397,19 +397,12 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      if (shootingTarget != null && self.getRemainingActionCooldownTicks() == 0) {
+      if (self.getRemainingActionCooldownTicks() == 0) {
         int[] cooldown = self.getRemainingCooldownTicksByAction();
-        double angle = self.getAngleTo(shootingTarget);
-        if (cooldown[ActionType.STAFF.ordinal()] == 0 && shooter.staffCanReach(shootingTarget)) {
+        if (shootingTarget != null
+            && cooldown[ActionType.STAFF.ordinal()] == 0
+            && shooter.staffCanReach(shootingTarget)) {
           move.setAction(ActionType.STAFF);
-        } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0
-            && self.getMana() >= game.getMagicMissileManacost()
-            && shooter.missileCanReach(shootingTarget)) {
-          double distance = self.getDistanceTo(shootingTarget);
-          move.setAction(ActionType.MAGIC_MISSILE);
-          move.setCastAngle(angle);
-          move.setMinCastDistance(
-              distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
         } else if (skiller.hasSkill(SkillType.SHIELD)
             && cooldown[ActionType.SHIELD.ordinal()] == 0
             && self.getMana() >= game.getShieldManacost()
@@ -422,6 +415,16 @@ public final class MyStrategy implements Strategy {
             && Arrays.stream(self.getStatuses())
                 .noneMatch(s -> s.getType() == StatusType.HASTENED)) {
           move.setAction(ActionType.HASTE);
+        } else if (shootingTarget != null
+            && cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0
+            && self.getMana() >= game.getMagicMissileManacost()
+            && shooter.missileCanReach(shootingTarget)) {
+          move.setAction(ActionType.MAGIC_MISSILE);
+          move.setCastAngle(self.getAngleTo(shootingTarget));
+          move.setMinCastDistance(
+              self.getDistanceTo(shootingTarget)
+                  - shootingTarget.getRadius()
+                  + game.getMagicMissileRadius());
         }
       }
 
