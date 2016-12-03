@@ -38,8 +38,8 @@ public final class MyStrategy implements Strategy {
   private static final int SQUARE_CRUDENESS = 20;
   private static final double SAFETY_EPS = 15;
 
+  private static final boolean PRINT_MOVE_TIME = false;
   private static final boolean LOAD_DEBUG_VISUALIZER = false;
-  private static final boolean DEBUG_TIME = false;
   private static final boolean DEBUG_DRAW_PATH = true;
   private static final boolean DEBUG_FIND_PATH = false;
   private static final boolean DEBUG_DRAW_WALLS = false;
@@ -90,15 +90,16 @@ public final class MyStrategy implements Strategy {
 
   @Override
   public void move(Wizard self, World world, Game game, Move move) {
-    long startTime = DEBUG_TIME ? System.nanoTime() : 0;
+    long startTime = PRINT_MOVE_TIME ? System.nanoTime() : 0;
 
     if (brain == null) {
       brain = new Brain(self, world, game);
     }
     brain.move(self, world, game, move);
 
-    if (DEBUG_TIME) {
-      System.out.println("TIME " + (double) (System.nanoTime() - startTime) / 1000000 + " ms");
+    if (PRINT_MOVE_TIME) {
+      long elapsedMilliseconds = (System.nanoTime() - startTime) / 1000000;
+      System.out.println("tick " + world.getTickIndex() + " took " + elapsedMilliseconds + " ms");
     }
   }
 
@@ -164,7 +165,7 @@ public final class MyStrategy implements Strategy {
           Object instance = clazz.getConstructor().newInstance();
           debugVisualizer = (Visualizer) instance;
         } catch (Exception e) {
-          // Visualizer is not available.
+          throw new RuntimeException("Cannot load DebugVisualizer");
         }
       }
       debug = debugVisualizer;
