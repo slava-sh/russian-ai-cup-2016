@@ -394,41 +394,12 @@ public final class MyStrategy implements Strategy {
         }
       }
 
-      /*
-      if (targetTree != null
-          && Math.abs(self.getAngleTo(targetTree)) < game.getStaffSector() / 2
-          && self.getRemainingActionCooldownTicks() == 0) {
+      if (shootingTarget != null && self.getRemainingActionCooldownTicks() == 0) {
         int[] cooldown = self.getRemainingCooldownTicksByAction();
-
-        if (cooldown[ActionType.STAFF.ordinal()] == 0
-            && (staff1.getDistanceTo(targetTree) < targetTree.getRadius()
-                || staff2.getDistanceTo(targetTree) < targetTree.getRadius()
-                || staff3.getDistanceTo(targetTree) < targetTree.getRadius())) {
+        if (cooldown[ActionType.STAFF.ordinal()] == 0 && shooter.staffCanReach(shootingTarget)) {
           move.setAction(ActionType.STAFF);
-        } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0) {
-          double distance = self.getDistanceTo(targetTree);
-          if (distance <= self.getCastRange()) {
-            double angle = self.getAngleTo(targetTree);
-            if (Math.abs(angle) < game.getStaffSector() / 2) {
-              move.setAction(ActionType.MAGIC_MISSILE);
-              move.setCastAngle(angle);
-              move.setMinCastDistance(
-                  distance - targetTree.getRadius() + game.getMagicMissileRadius());
-            }
-          }
-        }
-      }
-
-      if (debug != null) {
-        if (targetTree != null) {
-          debug.drawLine(
-              self.getX(), self.getY(), targetTree.getX(), targetTree.getY(), Color.black);
-        }
-      }
-      */
-
-      if (shootingTarget != null) {
-        if (distanceLessThan(self, shootingTarget, self.getCastRange())) {
+        } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0
+            && distanceLessThan(self, shootingTarget, self.getCastRange())) {
           double angle = self.getAngleTo(shootingTarget);
           if (Math.abs(angle) < game.getStaffSector() / 2.0D) {
             double distance = self.getDistanceTo(shootingTarget);
@@ -437,14 +408,6 @@ public final class MyStrategy implements Strategy {
             move.setMinCastDistance(
                 distance - shootingTarget.getRadius() + game.getMagicMissileRadius());
           }
-        }
-
-        int[] cooldown = self.getRemainingCooldownTicksByAction();
-        if (self.getRemainingActionCooldownTicks() == 0
-            && cooldown[ActionType.STAFF.ordinal()] == 0
-            && cooldown[ActionType.MAGIC_MISSILE.ordinal()] >= game.getWizardActionCooldownTicks()
-            && shooter.staffCanReach(shootingTarget)) {
-          move.setAction(ActionType.STAFF);
         }
       }
 
