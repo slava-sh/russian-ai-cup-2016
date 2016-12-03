@@ -334,15 +334,6 @@ public final class MyStrategy implements Strategy {
     public void move(Wizard self, World world, Game game, Move move) {
       updateObservers(self, world, game);
 
-      Point selfPoint = new Point(self);
-      Point p1 =
-          Point.fromPolar(game.getStaffRange(), self.getAngle() + game.getStaffSector() / 2)
-              .add(selfPoint);
-      Point p2 = Point.fromPolar(game.getStaffRange(), self.getAngle()).add(selfPoint);
-      Point p3 =
-          Point.fromPolar(game.getStaffRange(), self.getAngle() - game.getStaffSector() / 2)
-              .add(selfPoint);
-
       boolean lowHP = self.getLife() < 60;
       boolean reallyLowHP = self.getLife() < 40;
 
@@ -362,6 +353,8 @@ public final class MyStrategy implements Strategy {
 
       boolean inHomeArea =
           self.getX() < world.getWidth() * 0.40 && self.getY() > world.getHeight() * 0.60;
+
+      Point selfPoint = new Point(self);
 
       Point walkingTarget;
       if (bonus != null && !(inHomeArea && inDanger)) {
@@ -408,9 +401,9 @@ public final class MyStrategy implements Strategy {
         int[] cooldown = self.getRemainingCooldownTicksByAction();
 
         if (cooldown[ActionType.STAFF.ordinal()] == 0
-            && (p1.getDistanceTo(targetTree) < targetTree.getRadius()
-                || p2.getDistanceTo(targetTree) < targetTree.getRadius()
-                || p3.getDistanceTo(targetTree) < targetTree.getRadius())) {
+            && (staff1.getDistanceTo(targetTree) < targetTree.getRadius()
+                || staff2.getDistanceTo(targetTree) < targetTree.getRadius()
+                || staff3.getDistanceTo(targetTree) < targetTree.getRadius())) {
           move.setAction(ActionType.STAFF);
         } else if (cooldown[ActionType.MAGIC_MISSILE.ordinal()] == 0) {
           double distance = self.getDistanceTo(targetTree);
@@ -450,9 +443,7 @@ public final class MyStrategy implements Strategy {
         if (self.getRemainingActionCooldownTicks() == 0
             && cooldown[ActionType.STAFF.ordinal()] == 0
             && cooldown[ActionType.MAGIC_MISSILE.ordinal()] >= game.getWizardActionCooldownTicks()
-            && (distanceLessThan(p1, shootingTarget, shootingTarget.getRadius())
-                || distanceLessThan(p2, shootingTarget, shootingTarget.getRadius())
-                || distanceLessThan(p3, shootingTarget, shootingTarget.getRadius()))) {
+            && shooter.staffCanReach(shootingTarget)) {
           move.setAction(ActionType.STAFF);
         }
       }
@@ -477,11 +468,6 @@ public final class MyStrategy implements Strategy {
                           u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
           debug.drawAfterScene();
         }
-
-        debug.fillCircle(p1.getX(), p1.getY(), 2, Color.red);
-        debug.fillCircle(p2.getX(), p2.getY(), 2, Color.red);
-        debug.fillCircle(p3.getX(), p3.getY(), 2, Color.red);
-        debug.drawAfterScene();
 
         if (DEBUG_SHOW_OBSTACLE_HP) {
           for (LivingUnit unit : field.getAllObstacles()) {
@@ -1315,12 +1301,25 @@ public final class MyStrategy implements Strategy {
 
   private static class Shooter extends WorldObserver {
 
+    private Point staff1;
+    private Point staff2;
+    private Point staff3;
+
     public Shooter(Brain brain, Visualizer debug) {
       super(brain, debug);
     }
 
     @Override
     protected void update() {
+      Point selfPoint = new Point(self);
+      staff1 =
+          Point.fromPolar(game.getStaffRange(), self.getAngle() + game.getStaffSector() / 2)
+              .add(selfPoint);
+      staff2 = Point.fromPolar(game.getStaffRange(), self.getAngle()).add(selfPoint);
+      staff3 =
+          Point.fromPolar(game.getStaffRange(), self.getAngle() - game.getStaffSector() / 2)
+              .add(selfPoint);
+
       if (debug != null) {
         brain.drawWaves(
             self.getX(),
@@ -1338,8 +1337,17 @@ public final class MyStrategy implements Strategy {
             self.getAngle() - game.getStaffSector() / 2,
             game.getStaffSector(),
             Color.red);
+        debug.fillCircle(staff1.getX(), staff1.getY(), 2, Color.red);
+        debug.fillCircle(staff2.getX(), staff2.getY(), 2, Color.red);
+        debug.fillCircle(staff3.getX(), staff3.getY(), 2, Color.red);
         debug.drawAfterScene();
       }
+    }
+
+    public boolean staffCanReach(LivingUnit target) {
+      return distanceLessThan(staff1, target, target.getRadius())
+          || distanceLessThan(staff2, target, target.getRadius())
+          || distanceLessThan(staff3, target, target.getRadius());
     }
 
     public LivingUnit getTarget(double range) {
