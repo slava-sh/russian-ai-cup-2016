@@ -925,33 +925,12 @@ public final class MyStrategy implements Strategy {
 
       if (debug != null) {
         double[][] impactMap = new double[worldW][worldH];
-        double minImpact = -1;
-        double maxImpact = 1;
         for (int w = 0; w < worldW; ++w) {
           for (int h = 0; h < worldH; h++) {
             impactMap[w][h] = supportMap[w][h] - damageMap[w][h] + xpMap[w][h];
-            minImpact = Math.min(minImpact, impactMap[w][h]);
-            maxImpact = Math.max(maxImpact, impactMap[w][h]);
           }
         }
-        double impactRange = Math.max(Math.abs(minImpact), Math.abs(maxImpact));
-
-        for (int w = 0; w < worldW; ++w) {
-          for (int h = 0; h < worldH; h++) {
-            Square s = new Square(w, h);
-            if (!distanceLessThan(self, s.getCenter(), self.getVisionRange() * 2)) {
-              continue;
-            }
-            double alpha = impactMap[w][h] / impactRange;
-            debug.fillRect(
-                s.getLeftX(),
-                s.getTopY(),
-                s.getRightX(),
-                s.getBottomY(),
-                Color.getHSBColor(alpha < 0 ? 0f : 0.3f, (float) Math.abs(alpha), 1f));
-          }
-        }
-        debug.drawBeforeScene();
+        drawMap(impactMap, self.getVisionRange() / 2);
       }
 
       if (debug != null) {
@@ -968,6 +947,35 @@ public final class MyStrategy implements Strategy {
         }
         debug.drawBeforeScene();
       }
+    }
+
+    private void drawMap(double[][] map, double drawingRange) {
+      double min = -1;
+      double max = 1;
+      for (int w = 0; w < worldW; ++w) {
+        for (int h = 0; h < worldH; h++) {
+          min = Math.min(min, map[w][h]);
+          max = Math.max(max, map[w][h]);
+        }
+      }
+      double valueRange = Math.max(Math.abs(min), Math.abs(max));
+
+      for (int w = 0; w < worldW; ++w) {
+        for (int h = 0; h < worldH; h++) {
+          Square s = new Square(w, h);
+          if (!distanceLessThan(self, s.getCenter(), drawingRange)) {
+            continue;
+          }
+          double alpha = map[w][h] / valueRange;
+          debug.fillRect(
+              s.getLeftX(),
+              s.getTopY(),
+              s.getRightX(),
+              s.getBottomY(),
+              Color.getHSBColor(alpha < 0 ? 0f : 0.3f, (float) Math.abs(alpha), 1f));
+        }
+      }
+      debug.drawBeforeScene();
     }
 
     private void updateXpMap() {
