@@ -26,6 +26,7 @@ import model.LivingUnit;
 import model.Minion;
 import model.MinionType;
 import model.Move;
+import model.Projectile;
 import model.SkillType;
 import model.StatusType;
 import model.Tree;
@@ -146,7 +147,7 @@ public final class MyStrategy implements Strategy {
     private final Walker walker;
     private final Shooter shooter;
     private final Skiller skiller;
-    private final List<Point> trace = new LinkedList<>();
+    private final Evader evader;
     protected Wizard self;
     protected World world;
     protected Game game;
@@ -192,6 +193,9 @@ public final class MyStrategy implements Strategy {
 
       skiller = new Skiller(this, debug);
       observers.add(skiller);
+
+      evader = new Evader(this, debug);
+      observers.add(evader);
 
       if (debug != null) {
         printGameParameters();
@@ -375,7 +379,13 @@ public final class MyStrategy implements Strategy {
         walkingTarget = field.getNextWaypoint();
       }
 
-      Point shortWalkingTarget = getShortWalkingTarget(walkingTarget);
+      Point shortWalkingTarget;
+      Projectile projectile = evader.getClosestProjectile();
+      if (projectile != null) {
+        shortWalkingTarget = evader.evade(projectile);
+      } else {
+        shortWalkingTarget = getShortWalkingTarget(walkingTarget);
+      }
 
       Tree targetTree = getTargetTree(selfPoint, shortWalkingTarget);
       if (targetTree != null) {
@@ -385,7 +395,7 @@ public final class MyStrategy implements Strategy {
       walker.goTo(shortWalkingTarget, move);
       stuck.unstuck(move);
 
-      if (shootingTarget != null) {
+      if (shootingTarget != null && projectile == null) {
         walker.turnTo(shootingTarget, move);
       } else if (walkingTarget != selfPoint) {
         walker.turnTo(shortWalkingTarget, move);
@@ -432,59 +442,12 @@ public final class MyStrategy implements Strategy {
       skiller.maybeLearnSkill(move);
 
       if (debug != null) {
-        trace.add(selfPoint);
-        if (trace.size() == 200) {
-          trace.remove(0);
-        }
-        trace.forEach(
-            p -> {
-              debug.fillCircle(p.getX(), p.getY(), 1, Color.green);
-              debug.drawBeforeScene();
-            });
-
         debug.showText(
             self.getX(),
             self.getY(),
             String.valueOf(self.getRemainingActionCooldownTicks()),
             Color.black);
         debug.drawAfterScene();
-
-        final int T = 10;
-        Arrays.stream(world.getProjectiles())
-            .forEach(
-                p -> {
-                  debug.drawCircle(p.getX(), p.getY(), p.getRadius(), Color.black);
-                  debug.drawLine(
-                      p.getX(),
-                      p.getY(),
-                      p.getX() + p.getSpeedX() * T,
-                      p.getY() + p.getSpeedY() * T,
-                      Color.black);
-                  debug.drawAfterScene();
-                });
-
-        for (int i = 0; i < 4; ++i) {
-          double angle = self.getAngle() + i * Math.PI / 2;
-          {
-            Point speed = Point.fromPolar(game.getWizardForwardSpeed(), angle);
-            debug.drawLine(
-                self.getX(),
-                self.getY(),
-                self.getX() + speed.getX() * T,
-                self.getY() + speed.getY() * T,
-                Color.red);
-          }
-          {
-            Point speed = Point.fromPolar(game.getWizardStrafeSpeed(), angle);
-            debug.drawLine(
-                self.getX(),
-                self.getY(),
-                self.getX() + speed.getX() * T,
-                self.getY() + speed.getY() * T,
-                Color.black);
-          }
-          debug.drawBeforeScene();
-        }
 
         if (DEBUG_CIRCLE_OBSTACLES) {
           field
@@ -1279,6 +1242,115 @@ public final class MyStrategy implements Strategy {
 
     public void turnTo(Unit unit, Move move) {
       turnTo(new Point(unit), move);
+    }
+  }
+
+  private static class Evader extends WorldObserver {
+
+    private final List<Point> trace = new LinkedList<>();
+
+    public Evader(Brain brain, Visualizer debug) {
+      super(brain, debug);
+    }
+
+    public Projectile getClosestProjectile() {
+      return Arrays.stream(world.getProjectiles())
+          .filter(this::collidesWithSelf)
+          .sorted((p1, p2) -> self.getDistanceTo(p1) < self.getDistanceTo(p2) ? -1 : 1)
+          .findFirst()
+          .orElse(null);
+    }
+
+    @Override
+    protected void update() {
+
+      if (debug != null) {
+        trace.add(new Point(self));
+        if (trace.size() == 200) {
+          trace.remove(0);
+        }
+        trace.forEach(
+            p -> {
+              debug.fillCircle(p.getX(), p.getY(), 1, Color.green);
+              debug.drawBeforeScene();
+            });
+
+        final int T = 10;
+        Projectile projectile = getClosestProjectile();
+        if (projectile != null) {
+          debug.drawCircle(
+              projectile.getX(), projectile.getY(), projectile.getRadius(), Color.black);
+          debug.drawLine(
+              projectile.getX(),
+              projectile.getY(),
+              projectile.getX() + projectile.getSpeedX() * T,
+              projectile.getY() + projectile.getSpeedY() * T,
+              Color.black);
+          debug.drawAfterScene();
+        }
+
+        for (int i = 0; i < 4; ++i) {
+          double angle = self.getAngle() + i * Math.PI / 2;
+          {
+            Point speed = Point.fromPolar(game.getWizardForwardSpeed(), angle);
+            debug.drawLine(
+                self.getX(),
+                self.getY(),
+                self.getX() + speed.getX() * T,
+                self.getY() + speed.getY() * T,
+                Color.red);
+          }
+          {
+            Point speed = Point.fromPolar(game.getWizardStrafeSpeed(), angle);
+            debug.drawLine(
+                self.getX(),
+                self.getY(),
+                self.getX() + speed.getX() * T,
+                self.getY() + speed.getY() * T,
+                Color.black);
+          }
+          debug.drawBeforeScene();
+        }
+      }
+    }
+
+    private boolean collidesWithSelf(Projectile projectile) {
+      return collidesWithSelfPoint(new Point(self), projectile);
+    }
+
+    private boolean collidesWithSelfPoint(Point selfPoint, Projectile projectile) {
+      if (projectile.getOwnerUnitId() == self.getId()) {
+        return false;
+      }
+
+      Point projectilePoint = new Point(projectile);
+      Point speed = new Point(projectile.getSpeedX(), projectile.getSpeedY());
+      for (int t = 0; ; t += 1) {
+        Point pos = projectilePoint.add(speed.mul(t));
+        if (!distanceLessThan(pos, selfPoint, self.getVisionRange())) {
+          break;
+        }
+        if (distanceLessThan(pos, selfPoint, self.getRadius() + projectile.getRadius())) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    public Point evade(Projectile projectile) {
+      Point evasionSpeed =
+          new Point(projectile.getSpeedY(), -projectile.getSpeedX()).unit().mul(100);
+      Point p1 = evade(projectile, evasionSpeed);
+      Point p2 = evade(projectile, evasionSpeed.negate());
+      return p1.getDistanceTo(self) < p2.getDistanceTo(self) ? p1 : p2;
+    }
+
+    private Point evade(Projectile projectile, Point evasionSpeed) {
+      Point newSelfPoint = new Point(self);
+      while (collidesWithSelfPoint(newSelfPoint, projectile)) {
+        newSelfPoint = newSelfPoint.add(evasionSpeed);
+      }
+      return newSelfPoint;
     }
   }
 
