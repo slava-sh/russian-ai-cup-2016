@@ -926,14 +926,13 @@ public final class MyStrategy implements Strategy {
       if (debug != null) {
         double[][] impactMap = new double[worldW][worldH];
         for (int w = 0; w < worldW; ++w) {
-          for (int h = 0; h < worldH; h++) {
+          for (int h = 0; h < worldH; ++h) {
             impactMap[w][h] = supportMap[w][h] - damageMap[w][h] + xpMap[w][h];
           }
         }
         drawMap(impactMap, self.getVisionRange() / 2);
-      }
+        drawMiniMap(impactMap, 4, 3, 141, 579);
 
-      if (debug != null) {
         for (int i = 0; i < waypoints.length; ++i) {
           debug.fillCircle(waypoints[i].getX(), waypoints[i].getY(), 5, Color.lightGray);
           if (i != 0) {
@@ -949,11 +948,44 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    private void drawMiniMap(double[][] map, int zoom, double squareSize, double x0, double y0) {
+      double min = -1;
+      double max = 1;
+      for (int w = 0; w < worldW; ++w) {
+        for (int h = 0; h < worldH; ++h) {
+          min = Math.min(min, map[w][h]);
+          max = Math.max(max, map[w][h]);
+        }
+      }
+      double valueRange = Math.max(Math.abs(min), Math.abs(max));
+
+      for (int w = zoom - 1; w < worldW; w += zoom) {
+        for (int h = zoom - 1; h < worldH; h += zoom) {
+          double avg = 0;
+          for (int dw = 1 - zoom; dw <= 0; ++dw) {
+            for (int dh = 1 - zoom; dh <= 0; ++dh) {
+              avg += map[w + dw][h + dh];
+            }
+          }
+          avg /= zoom * zoom;
+
+          double alpha = avg / valueRange;
+          debug.fillRect(
+              x0 + (w / zoom) * squareSize,
+              y0 + (h / zoom) * squareSize,
+              x0 + (w / zoom + 1) * squareSize,
+              y0 + (h / zoom + 1) * squareSize,
+              Color.getHSBColor(alpha < 0 ? 0f : 0.3f, (float) Math.abs(alpha), 1f));
+        }
+      }
+      debug.drawAbsolute();
+    }
+
     private void drawMap(double[][] map, double drawingRange) {
       double min = -1;
       double max = 1;
       for (int w = 0; w < worldW; ++w) {
-        for (int h = 0; h < worldH; h++) {
+        for (int h = 0; h < worldH; ++h) {
           min = Math.min(min, map[w][h]);
           max = Math.max(max, map[w][h]);
         }
@@ -961,7 +993,7 @@ public final class MyStrategy implements Strategy {
       double valueRange = Math.max(Math.abs(min), Math.abs(max));
 
       for (int w = 0; w < worldW; ++w) {
-        for (int h = 0; h < worldH; h++) {
+        for (int h = 0; h < worldH; ++h) {
           Square s = new Square(w, h);
           if (!distanceLessThan(self, s.getCenter(), drawingRange)) {
             continue;
