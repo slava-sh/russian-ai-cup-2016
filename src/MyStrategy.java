@@ -854,6 +854,8 @@ public final class MyStrategy implements Strategy {
     private static final int MOVING_UNIT_PRIORITY = -1000;
     private static final int FORWARD_SQUARE_PRIORITY = 1000;
 
+    private final int worldW;
+    private final int worldH;
     private final Point[] waypoints;
     private final List<Building> enemyBuildings;
 
@@ -863,9 +865,15 @@ public final class MyStrategy implements Strategy {
     private Map<Square, Integer> priority = new HashMap<>();
 
     private double[][] damageMap;
+    private double[][] supportMap;
+    private double[][] xpMap;
 
     public Field(Brain brain, Visualizer debug, Wizard self, World world, Game game) {
       super(brain, debug);
+
+      Square maxSquare = Square.containing(world.getWidth(), world.getHeight());
+      worldW = maxSquare.getW() + 1;
+      worldH = maxSquare.getH() + 1;
 
       double mapSize = game.getMapSize();
 
@@ -911,7 +919,40 @@ public final class MyStrategy implements Strategy {
       updateWeakTrees();
       updateMovingUnits();
       updateDamageMap();
+      updateSupportMap();
+      updateXpMap();
       updatePriorities();
+
+      if (debug != null) {
+        double[][] impactMap = new double[worldW][worldH];
+        double minImpact = -1;
+        double maxImpact = 1;
+        for (int w = 0; w < worldW; ++w) {
+          for (int h = 0; h < worldH; h++) {
+            impactMap[w][h] = supportMap[w][h] - damageMap[w][h] + xpMap[w][h];
+            minImpact = Math.min(minImpact, impactMap[w][h]);
+            maxImpact = Math.max(maxImpact, impactMap[w][h]);
+          }
+        }
+        double impactRange = Math.max(Math.abs(minImpact), Math.abs(maxImpact));
+
+        for (int w = 0; w < worldW; ++w) {
+          for (int h = 0; h < worldH; h++) {
+            Square s = new Square(w, h);
+            if (!distanceLessThan(self, s.getCenter(), self.getVisionRange() * 2)) {
+              continue;
+            }
+            double alpha = impactMap[w][h] / impactRange;
+            debug.fillRect(
+                s.getLeftX(),
+                s.getTopY(),
+                s.getRightX(),
+                s.getBottomY(),
+                Color.getHSBColor(alpha < 0 ? 0f : 0.3f, (float) Math.abs(alpha), 1f));
+          }
+        }
+        debug.drawBeforeScene();
+      }
 
       if (debug != null) {
         for (int i = 0; i < waypoints.length; ++i) {
@@ -929,9 +970,67 @@ public final class MyStrategy implements Strategy {
       }
     }
 
+    private void updateXpMap() {
+      xpMap = new double[worldW][worldH];
+    }
+
+    private void updateSupportMap() {
+      supportMap = new double[worldW][worldH];
+
+      Arrays.stream(world.getBuildings())
+          .filter(brain::isAlly)
+          .forEach(
+              b -> {
+                brain
+                    .field
+                    .getSquares(b, b.getAttackRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          double t =
+                              1
+                                  - (double) b.getRemainingActionCooldownTicks()
+                                      / b.getCooldownTicks();
+                          supportMap[s.getW()][s.getH()] += lerp(0, brain.getAttackDamage(b), t);
+                        });
+              });
+
+      Arrays.stream(world.getWizards())
+          .filter(brain::isAlly)
+          .filter(w -> !w.isMe())
+          .forEach(
+              w -> {
+                brain
+                    .field
+                    .getSquares(w, w.getCastRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          supportMap[s.getW()][s.getH()] += game.getMagicMissileDirectDamage();
+                        });
+                brain
+                    .field
+                    .getSquares(w, game.getStaffRange() + self.getRadius())
+                    .forEach(
+                        s -> {
+                          supportMap[s.getW()][s.getH()] += game.getStaffDamage();
+                        });
+              });
+
+      Arrays.stream(world.getMinions())
+          .filter(brain::isAlly)
+          .forEach(
+              m -> {
+                brain
+                    .field
+                    .getSquares(m, brain.getAttackRange(m) + self.getRadius())
+                    .forEach(
+                        s -> {
+                          supportMap[s.getW()][s.getH()] += brain.getAttackDamage(m);
+                        });
+              });
+    }
+
     private void updateDamageMap() {
-      Square maxSquare = Square.containing(world.getWidth(), world.getHeight());
-      damageMap = new double[maxSquare.getW() + 1][maxSquare.getH() + 1];
+      damageMap = new double[worldW][worldH];
 
       enemyBuildings.forEach(
           b -> {
@@ -978,86 +1077,6 @@ public final class MyStrategy implements Strategy {
                           damageMap[s.getW()][s.getH()] += brain.getAttackDamage(m);
                         });
               });
-
-      Arrays.stream(world.getBuildings())
-          .filter(brain::isAlly)
-          .forEach(
-              b -> {
-                brain
-                    .field
-                    .getSquares(b, b.getAttackRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          double t =
-                              1
-                                  - (double) b.getRemainingActionCooldownTicks()
-                                      / b.getCooldownTicks();
-                          damageMap[s.getW()][s.getH()] -= lerp(0, brain.getAttackDamage(b), t);
-                        });
-              });
-
-      Arrays.stream(world.getWizards())
-          .filter(brain::isAlly)
-          .filter(w -> !w.isMe())
-          .forEach(
-              w -> {
-                brain
-                    .field
-                    .getSquares(w, w.getCastRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          damageMap[s.getW()][s.getH()] -= game.getMagicMissileDirectDamage();
-                        });
-                brain
-                    .field
-                    .getSquares(w, game.getStaffRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          damageMap[s.getW()][s.getH()] -= game.getStaffDamage();
-                        });
-              });
-
-      Arrays.stream(world.getMinions())
-          .filter(brain::isAlly)
-          .forEach(
-              m -> {
-                brain
-                    .field
-                    .getSquares(m, brain.getAttackRange(m) + self.getRadius())
-                    .forEach(
-                        s -> {
-                          damageMap[s.getW()][s.getH()] -= brain.getAttackDamage(m);
-                        });
-              });
-
-      if (debug != null) {
-        double minImpact = -1;
-        double maxImpact = 1;
-        for (int w = 0; w < damageMap.length; ++w) {
-          for (int h = 0; h < damageMap[w].length; h++) {
-            minImpact = Math.min(minImpact, damageMap[w][h]);
-            maxImpact = Math.max(maxImpact, damageMap[w][h]);
-          }
-        }
-        double impactRange = Math.max(Math.abs(minImpact), Math.abs(maxImpact));
-
-        for (int w = 0; w < damageMap.length; ++w) {
-          for (int h = 0; h < damageMap[w].length; h++) {
-            Square s = new Square(w, h);
-            if (!distanceLessThan(self, s.getCenter(), self.getVisionRange() * 2)) {
-              continue;
-            }
-            double alpha = damageMap[w][h] / impactRange;
-            debug.fillRect(
-                s.getLeftX(),
-                s.getTopY(),
-                s.getRightX(),
-                s.getBottomY(),
-                Color.getHSBColor(alpha > 0 ? 0f : 0.3f, (float) Math.abs(alpha), 1f));
-          }
-        }
-        debug.drawBeforeScene();
-      }
     }
 
     private void updatePriorities() {
@@ -1164,13 +1183,8 @@ public final class MyStrategy implements Strategy {
       List<Square> result = new ArrayList<>();
       Square topLeft = Square.containing(unit.getX() - r, unit.getY() - r);
       Square bottomRight = Square.containing(unit.getX() + r, unit.getY() + r);
-      Square maxSquare = Square.containing(world.getWidth(), world.getHeight());
-      for (int p = Math.max(0, topLeft.getW());
-          p <= bottomRight.getW() && p <= maxSquare.getW();
-          ++p) {
-        for (int q = Math.max(0, topLeft.getH());
-            q <= bottomRight.getH() && q <= maxSquare.getH();
-            ++q) {
+      for (int p = Math.max(0, topLeft.getW()); p <= bottomRight.getW() && p < worldW; ++p) {
+        for (int q = Math.max(0, topLeft.getH()); q <= bottomRight.getH() && q < worldH; ++q) {
           Square square = new Square(p, q);
           if (distanceLessThan(unit, square.getCenter(), r)) {
             result.add(square);
