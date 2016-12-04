@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.SortedSet;
@@ -37,6 +38,7 @@ public final class MyStrategy implements Strategy {
 
   private static final int SQUARE_CRUDENESS = 20;
   private static final double SAFETY_EPS = 15;
+  private static final int LOOKAHEAD_TICKS = 50;
 
   private static final boolean PRINT_MOVE_TIME = false;
   private static final boolean LOAD_DEBUG_VISUALIZER = true;
@@ -918,9 +920,7 @@ public final class MyStrategy implements Strategy {
       updateWalls();
       updateWeakTrees();
       updateMovingUnits();
-      updateDamageMap();
-      updateSupportMap();
-      updateXpMap();
+      updateMaps();
       updatePriorities();
 
       if (debug != null) {
@@ -949,8 +949,8 @@ public final class MyStrategy implements Strategy {
     }
 
     private void drawMiniMap(double[][] map, int zoom, double squareSize, double x0, double y0) {
-      double min = -1;
-      double max = 1;
+      double min = -100;
+      double max = 100;
       for (int w = 0; w < worldW; ++w) {
         for (int h = 0; h < worldH; ++h) {
           min = Math.min(min, map[w][h]);
@@ -1010,113 +1010,104 @@ public final class MyStrategy implements Strategy {
       debug.drawBeforeScene();
     }
 
-    private void updateXpMap() {
-      xpMap = new double[worldW][worldH];
-    }
-
-    private void updateSupportMap() {
+    private void updateMaps() {
+      damageMap = new double[worldW][worldH];
       supportMap = new double[worldW][worldH];
+      xpMap = new double[worldW][worldH];
 
       Arrays.stream(world.getBuildings())
-          .filter(brain::isAlly)
           .forEach(
               b -> {
-                brain
-                    .field
-                    .getSquares(b, b.getAttackRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          double t =
-                              1
-                                  - (double) b.getRemainingActionCooldownTicks()
-                                      / b.getCooldownTicks();
-                          supportMap[s.getW()][s.getH()] += lerp(0, brain.getAttackDamage(b), t);
-                        });
+                double damage =
+                    discountDamage(brain.getAttackDamage(b), b.getRemainingActionCooldownTicks());
+
+                if (brain.isEnemy(b)) {
+                  brain
+                      .field
+                      .getSquares(b, b.getAttackRange() + self.getRadius())
+                      .forEach(s -> damageMap[s.getW()][s.getH()] += damage);
+                }
+
+                if (brain.isAlly(b)) {
+                  brain
+                      .field
+                      .getSquares(b, b.getAttackRange() + self.getRadius())
+                      .forEach(s -> supportMap[s.getW()][s.getH()] += damage);
+                }
               });
 
       Arrays.stream(world.getWizards())
-          .filter(brain::isAlly)
-          .filter(w -> !w.isMe())
           .forEach(
               w -> {
-                brain
-                    .field
-                    .getSquares(w, w.getCastRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          supportMap[s.getW()][s.getH()] += game.getMagicMissileDirectDamage();
-                        });
-                brain
-                    .field
-                    .getSquares(w, game.getStaffRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          supportMap[s.getW()][s.getH()] += game.getStaffDamage();
-                        });
+                int[] cooldown = w.getRemainingCooldownTicksByAction();
+                double missileDamage =
+                    discountDamage(
+                        game.getMagicMissileDirectDamage(),
+                        Math.max(
+                            w.getRemainingActionCooldownTicks(),
+                            cooldown[ActionType.MAGIC_MISSILE.ordinal()]));
+                double staffDamage =
+                    discountDamage(
+                        game.getStaffDamage(),
+                        Math.max(
+                            w.getRemainingActionCooldownTicks(),
+                            cooldown[ActionType.STAFF.ordinal()]));
+
+                if (brain.isEnemy(w)) {
+                  brain
+                      .field
+                      .getSquares(w, w.getCastRange() + self.getRadius())
+                      .forEach(s -> damageMap[s.getW()][s.getH()] += missileDamage);
+                  brain
+                      .field
+                      .getSquares(w, game.getStaffRange() + self.getRadius())
+                      .forEach(s -> damageMap[s.getW()][s.getH()] += staffDamage);
+                }
+
+                if (brain.isAlly(w) && !w.isMe()) {
+                  brain
+                      .field
+                      .getSquares(w, w.getCastRange() + self.getRadius())
+                      .forEach(s -> supportMap[s.getW()][s.getH()] += missileDamage);
+                  brain
+                      .field
+                      .getSquares(w, game.getStaffRange() + self.getRadius())
+                      .forEach(s -> supportMap[s.getW()][s.getH()] += staffDamage);
+                }
               });
 
       Arrays.stream(world.getMinions())
-          .filter(brain::isAlly)
           .forEach(
               m -> {
-                brain
-                    .field
-                    .getSquares(m, brain.getAttackRange(m) + self.getRadius())
-                    .forEach(
-                        s -> {
-                          supportMap[s.getW()][s.getH()] += brain.getAttackDamage(m);
-                        });
+                double damage =
+                    discountDamage(brain.getAttackDamage(m), m.getRemainingActionCooldownTicks());
+
+                if (brain.isEnemy(m)) {
+                  brain
+                      .field
+                      .getSquares(m, brain.getAttackRange(m) + self.getRadius())
+                      .forEach(s -> damageMap[s.getW()][s.getH()] += damage);
+                }
+
+                if (brain.isAlly(m)) {
+                  brain
+                      .field
+                      .getSquares(m, brain.getAttackRange(m) + self.getRadius())
+                      .forEach(s -> supportMap[s.getW()][s.getH()] += damage);
+                }
+              });
+
+      Stream.of(brain.bonusFinder.findBonus())
+          .filter(Objects::nonNull)
+          .forEach(
+              b -> {
+                Square s = Square.containing(b);
+                xpMap[s.getW()][s.getH()] += game.getBonusScoreAmount();
               });
     }
 
-    private void updateDamageMap() {
-      damageMap = new double[worldW][worldH];
-
-      enemyBuildings.forEach(
-          b -> {
-            brain
-                .field
-                .getSquares(b, b.getAttackRange() + self.getRadius())
-                .forEach(
-                    s -> {
-                      double t =
-                          1 - (double) b.getRemainingActionCooldownTicks() / b.getCooldownTicks();
-                      damageMap[s.getW()][s.getH()] += lerp(0, brain.getAttackDamage(b), t);
-                    });
-          });
-
-      Arrays.stream(world.getWizards())
-          .filter(brain::isEnemy)
-          .forEach(
-              w -> {
-                brain
-                    .field
-                    .getSquares(w, w.getCastRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          damageMap[s.getW()][s.getH()] += game.getMagicMissileDirectDamage();
-                        });
-                brain
-                    .field
-                    .getSquares(w, game.getStaffRange() + self.getRadius())
-                    .forEach(
-                        s -> {
-                          damageMap[s.getW()][s.getH()] += game.getStaffDamage();
-                        });
-              });
-
-      Arrays.stream(world.getMinions())
-          .filter(brain::isEnemy)
-          .forEach(
-              m -> {
-                brain
-                    .field
-                    .getSquares(m, brain.getAttackRange(m) + self.getRadius())
-                    .forEach(
-                        s -> {
-                          damageMap[s.getW()][s.getH()] += brain.getAttackDamage(m);
-                        });
-              });
+    private double discountDamage(double maxDamage, int remainingCooldownTicks) {
+      return remainingCooldownTicks <= LOOKAHEAD_TICKS ? maxDamage : 0;
     }
 
     private void updatePriorities() {
