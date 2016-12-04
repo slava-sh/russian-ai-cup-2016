@@ -36,6 +36,26 @@ import model.World;
 
 public final class MyStrategy implements Strategy {
 
+  private static final double SUPPORT_K = 0.5;
+  private static final double DAMAGE_K = -1;
+  private static final double XP_K = 0.2;
+
+  private static final double BONUS_XP_K = 100;
+  private static final double ATTACK_XP_MIN_RANGE_K = 0.5;
+  private static final double ATTACK_XP_MAX_RANGE_K = 1;
+
+  private static final double BUILDING_SUPPORT_RANGE_K = 0.75;
+  private static final double MISSILE_SUPPORT_RANGE_K = 0.5;
+  private static final double STAFF_RANGE_SUPPORT_K = 1;
+  private static final double FETISH_SUPPORT_RANGE_K = 1;
+  private static final double WOODCUTTER_SUPPORT_RANGE_K = 1;
+
+  private static final double BUILDING_DAMAGE_RANGE_K = 1;
+  private static final double MISSILE_DAMAGE_RANGE_K = 1;
+  private static final double STAFF_DAMAGE_RANGE_K = 1;
+  private static final double FETISH_DAMAGE_RANGE_K = 1;
+  private static final double WOODCUTTER_DAMAGE_RANGE_K = 1.5;
+
   private static final int SQUARE_CRUDENESS = 20;
   private static final double SAFETY_EPS = 15;
   private static final int LOOKAHEAD_TICKS = 50;
@@ -927,7 +947,8 @@ public final class MyStrategy implements Strategy {
         double[][] impactMap = new double[worldW][worldH];
         for (int w = 0; w < worldW; ++w) {
           for (int h = 0; h < worldH; ++h) {
-            impactMap[w][h] = supportMap[w][h] - 2 * damageMap[w][h] + 0.25 * xpMap[w][h];
+            impactMap[w][h] =
+                SUPPORT_K * supportMap[w][h] + DAMAGE_K * damageMap[w][h] + XP_K * xpMap[w][h];
           }
         }
         drawMap(impactMap, 5);
@@ -1025,29 +1046,43 @@ public final class MyStrategy implements Strategy {
       supportMap = new double[worldW][worldH];
       xpMap = new double[worldW][worldH];
 
+      double selfAttackDamage = brain.getAttackDamage(self);
+      int selfRemainingCooldownTicks =
+          Math.max(
+              self.getRemainingActionCooldownTicks(),
+              self.getRemainingCooldownTicksByAction()[ActionType.MAGIC_MISSILE.ordinal()]);
+
       Arrays.stream(world.getBuildings())
           .forEach(
               b -> {
                 double damage =
-                    discountDamage(brain.getAttackDamage(b), b.getRemainingActionCooldownTicks());
+                    discount(brain.getAttackDamage(b), b.getRemainingActionCooldownTicks());
 
                 if (brain.isEnemy(b)) {
                   brain
                       .field
-                      .getSquares(b, b.getAttackRange() + self.getRadius())
+                      .getSquares(
+                          b, b.getAttackRange() * BUILDING_DAMAGE_RANGE_K + self.getRadius())
                       .forEach(s -> damageMap[s.getW()][s.getH()] += damage);
 
-                  double xp = b.getLife() * game.getBuildingEliminationScoreFactor();
+                  double xp =
+                      discount(
+                          Math.min(selfAttackDamage, b.getLife())
+                              * game.getBuildingEliminationScoreFactor(),
+                          selfRemainingCooldownTicks);
                   brain
                       .field
-                      .getSquares(b, self.getCastRange() / 2, self.getCastRange())
+                      .getSquares(
+                          b,
+                          self.getCastRange() * ATTACK_XP_MIN_RANGE_K,
+                          self.getCastRange() * ATTACK_XP_MAX_RANGE_K)
                       .forEach(s -> xpMap[s.getW()][s.getH()] += xp);
                 }
 
                 if (brain.isAlly(b)) {
                   brain
                       .field
-                      .getSquares(b, b.getAttackRange() + self.getRadius())
+                      .getSquares(b, b.getAttackRange() * BUILDING_SUPPORT_RANGE_K)
                       .forEach(s -> supportMap[s.getW()][s.getH()] += damage);
                 }
               });
@@ -1057,13 +1092,13 @@ public final class MyStrategy implements Strategy {
               w -> {
                 int[] cooldown = w.getRemainingCooldownTicksByAction();
                 double missileDamage =
-                    discountDamage(
+                    discount(
                         game.getMagicMissileDirectDamage(),
                         Math.max(
                             w.getRemainingActionCooldownTicks(),
                             cooldown[ActionType.MAGIC_MISSILE.ordinal()]));
                 double staffDamage =
-                    discountDamage(
+                    discount(
                         game.getStaffDamage(),
                         Math.max(
                             w.getRemainingActionCooldownTicks(),
@@ -1072,28 +1107,35 @@ public final class MyStrategy implements Strategy {
                 if (brain.isEnemy(w)) {
                   brain
                       .field
-                      .getSquares(w, w.getCastRange() + self.getRadius())
+                      .getSquares(w, w.getCastRange() * MISSILE_DAMAGE_RANGE_K + self.getRadius())
                       .forEach(s -> damageMap[s.getW()][s.getH()] += missileDamage);
                   brain
                       .field
-                      .getSquares(w, game.getStaffRange() + self.getRadius())
+                      .getSquares(w, game.getStaffRange() * STAFF_DAMAGE_RANGE_K + self.getRadius())
                       .forEach(s -> damageMap[s.getW()][s.getH()] += staffDamage);
 
-                  double xp = w.getLife() * game.getWizardEliminationScoreFactor();
+                  double xp =
+                      discount(
+                          Math.min(selfAttackDamage, w.getLife())
+                              * game.getWizardEliminationScoreFactor(),
+                          selfRemainingCooldownTicks);
                   brain
                       .field
-                      .getSquares(w, self.getCastRange() / 2, self.getCastRange())
+                      .getSquares(
+                          w,
+                          self.getCastRange() * ATTACK_XP_MIN_RANGE_K,
+                          self.getCastRange() * ATTACK_XP_MAX_RANGE_K)
                       .forEach(s -> xpMap[s.getW()][s.getH()] += xp);
                 }
 
                 if (brain.isAlly(w) && !w.isMe()) {
                   brain
                       .field
-                      .getSquares(w, w.getCastRange() + self.getRadius())
+                      .getSquares(w, w.getCastRange() * MISSILE_SUPPORT_RANGE_K)
                       .forEach(s -> supportMap[s.getW()][s.getH()] += missileDamage);
                   brain
                       .field
-                      .getSquares(w, game.getStaffRange() + self.getRadius())
+                      .getSquares(w, game.getStaffRange() * STAFF_RANGE_SUPPORT_K)
                       .forEach(s -> supportMap[s.getW()][s.getH()] += staffDamage);
                 }
               });
@@ -1102,25 +1144,41 @@ public final class MyStrategy implements Strategy {
           .forEach(
               m -> {
                 double damage =
-                    discountDamage(brain.getAttackDamage(m), m.getRemainingActionCooldownTicks());
+                    discount(brain.getAttackDamage(m), m.getRemainingActionCooldownTicks());
 
                 if (brain.isEnemy(m)) {
+                  double K =
+                      m.getType() == MinionType.ORC_WOODCUTTER
+                          ? WOODCUTTER_DAMAGE_RANGE_K
+                          : FETISH_DAMAGE_RANGE_K;
                   brain
                       .field
-                      .getSquares(m, brain.getAttackRange(m) + self.getRadius())
+                      .getSquares(m, brain.getAttackRange(m) * K + self.getRadius())
                       .forEach(s -> damageMap[s.getW()][s.getH()] += damage);
 
-                  double xp = m.getLife() * game.getMinionEliminationScoreFactor();
+                  double xp =
+                      discount(
+                          selfAttackDamage >= m.getLife()
+                              ? m.getLife() * game.getMinionEliminationScoreFactor()
+                              : 0,
+                          selfRemainingCooldownTicks);
                   brain
                       .field
-                      .getSquares(m, self.getCastRange() / 2, self.getCastRange())
+                      .getSquares(
+                          m,
+                          self.getCastRange() * ATTACK_XP_MIN_RANGE_K,
+                          self.getCastRange() * ATTACK_XP_MAX_RANGE_K)
                       .forEach(s -> xpMap[s.getW()][s.getH()] += xp);
                 }
 
                 if (brain.isAlly(m)) {
+                  double K =
+                      m.getType() == MinionType.ORC_WOODCUTTER
+                          ? WOODCUTTER_SUPPORT_RANGE_K
+                          : FETISH_SUPPORT_RANGE_K;
                   brain
                       .field
-                      .getSquares(m, brain.getAttackRange(m) + self.getRadius())
+                      .getSquares(m, brain.getAttackRange(m) * K)
                       .forEach(s -> supportMap[s.getW()][s.getH()] += damage);
                 }
               });
@@ -1130,12 +1188,12 @@ public final class MyStrategy implements Strategy {
           .forEach(
               b -> {
                 Square s = Square.containing(b);
-                xpMap[s.getW()][s.getH()] += game.getBonusScoreAmount();
+                xpMap[s.getW()][s.getH()] += BONUS_XP_K * game.getBonusScoreAmount();
               });
     }
 
-    private double discountDamage(double maxDamage, int remainingCooldownTicks) {
-      return remainingCooldownTicks <= LOOKAHEAD_TICKS ? maxDamage : 0;
+    private double discount(double maxValue, int ticksUntilMaxValue) {
+      return ticksUntilMaxValue <= LOOKAHEAD_TICKS ? maxValue : 0;
     }
 
     private void updatePriorities() {
