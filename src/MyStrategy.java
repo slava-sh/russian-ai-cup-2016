@@ -36,10 +36,11 @@ import model.World;
 
 public final class MyStrategy implements Strategy {
 
-  private static final double SUPPORT_K = 0.5;
+  private static final double SUPPORT_K = 0.1;
   private static final double DAMAGE_K = -1;
-  private static final double XP_K = 0.2;
+  private static final double XP_K = 10;
 
+  private static final double WAYPOINT_IMPACT_K = 300;
   private static final double BONUS_XP_K = 100;
   private static final double ATTACK_XP_MIN_RANGE_K = 0.5;
   private static final double ATTACK_XP_MAX_RANGE_K = 1;
@@ -385,6 +386,7 @@ public final class MyStrategy implements Strategy {
 
       Point selfPoint = new Point(self);
 
+      /*
       Point walkingTarget;
       if (bonus != null && !(inHomeArea && inDanger)) {
         walkingTarget = bonus;
@@ -398,6 +400,26 @@ public final class MyStrategy implements Strategy {
         walkingTarget = field.getFactionBaseWaypoint();
       } else {
         walkingTarget = field.getNextWaypoint();
+      }
+      */
+
+      if (getEnemies().noneMatch(unit -> distanceLessThan(self, unit, self.getVisionRange() * 2))) {
+        Square waypoint = Square.containing(field.getNextWaypoint());
+        field.impactMap[waypoint.getW()][waypoint.getH()] += WAYPOINT_IMPACT_K;
+      }
+
+      Square selfSquare = Square.containing(selfPoint);
+      Point walkingTarget = null;
+      double walkingTargetScore = 0;
+      for (int w = 0; w < field.worldW; ++w) {
+        for (int h = 0; h < field.worldH; ++h) {
+          double distance = Math.abs(selfSquare.getW() - w) + Math.abs(selfSquare.getH() - h);
+          double score = field.impactMap[w][h] * Math.exp(-1e-3 * distance);
+          if (walkingTarget == null || score > walkingTargetScore) {
+            walkingTarget = new Square(w, h).getCenter();
+            walkingTargetScore = score;
+          }
+        }
       }
 
       Point shortWalkingTarget = getShortWalkingTarget(walkingTarget);
@@ -571,13 +593,22 @@ public final class MyStrategy implements Strategy {
           .orElse(null);
     }
 
+    Stream<LivingUnit> getEnemies() {
+      return Stream.of(
+              Arrays.stream(world.getWizards()),
+              Arrays.stream(world.getBuildings()),
+              Arrays.stream(world.getMinions()))
+          .flatMap(Function.identity())
+          .filter(this::isEnemy);
+    }
+
     Stream<LivingUnit> getAllies() {
       return Stream.of(
               Arrays.stream(world.getWizards()),
               Arrays.stream(world.getBuildings()),
               Arrays.stream(world.getMinions()))
           .flatMap(Function.identity())
-          .filter(u -> isAlly(u));
+          .filter(this::isAlly);
     }
 
     boolean canSee(Point point) {
@@ -889,6 +920,7 @@ public final class MyStrategy implements Strategy {
     private double[][] damageMap;
     private double[][] supportMap;
     private double[][] xpMap;
+    private double[][] impactMap;
 
     public Field(Brain brain, Visualizer debug, Wizard self, World world, Game game) {
       super(brain, debug);
@@ -943,16 +975,20 @@ public final class MyStrategy implements Strategy {
       updateMaps();
       updatePriorities();
 
-      if (debug != null) {
-        double[][] impactMap = new double[worldW][worldH];
-        for (int w = 0; w < worldW; ++w) {
-          for (int h = 0; h < worldH; ++h) {
-            impactMap[w][h] =
-                SUPPORT_K * supportMap[w][h] + DAMAGE_K * damageMap[w][h] + XP_K * xpMap[w][h];
-          }
+      impactMap = new double[worldW][worldH];
+      for (int w = 0; w < worldW; ++w) {
+        for (int h = 0; h < worldH; ++h) {
+          impactMap[w][h] =
+              SUPPORT_K * supportMap[w][h] + DAMAGE_K * damageMap[w][h] + XP_K * xpMap[w][h];
         }
+      }
+
+      if (debug != null) {
         drawMap(impactMap, 5);
         drawMiniMap(impactMap, 4, 3, 141, 579);
+        drawMiniMap(supportMap, 4, 3, 141 * 2, 579);
+        drawMiniMap(damageMap, 4, 3, 141 * 3, 579);
+        drawMiniMap(xpMap, 4, 3, 141 * 4, 579);
 
         for (int i = 0; i < waypoints.length; ++i) {
           debug.fillCircle(waypoints[i].getX(), waypoints[i].getY(), 5, Color.lightGray);
