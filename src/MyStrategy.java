@@ -440,12 +440,10 @@ public final class MyStrategy implements Strategy {
 
         if (DEBUG_CIRCLE_OBSTACLES) {
           field
-              .getAllObstacles()
-              .stream()
-              .forEach(
-                  u ->
-                      debug.drawCircle(
-                          u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
+              .getAllObstacles().forEach(
+              u ->
+                  debug.drawCircle(
+                      u.getX(), u.getY(), u.getRadius() + self.getRadius(), Color.yellow));
           debug.drawAfterScene();
         }
 
@@ -551,7 +549,7 @@ public final class MyStrategy implements Strategy {
               Arrays.stream(world.getBuildings()),
               Arrays.stream(world.getMinions()))
           .flatMap(Function.identity())
-          .filter(u -> isAlly(u));
+          .filter(this::isAlly);
     }
 
     boolean canSee(Point point) {
@@ -666,13 +664,13 @@ public final class MyStrategy implements Strategy {
     Minion[] getFetishes() {
       return Arrays.stream(world.getMinions())
           .filter(m -> m.getType() == MinionType.FETISH_BLOWDART)
-          .toArray(size -> new Minion[size]);
+          .toArray(Minion[]::new);
     }
 
     Minion[] getWoodcutters() {
       return Arrays.stream(world.getMinions())
           .filter(m -> m.getType() == MinionType.ORC_WOODCUTTER)
-          .toArray(size -> new Minion[size]);
+          .toArray(Minion[]::new);
     }
 
     boolean isMe(Unit unit) {
@@ -894,7 +892,7 @@ public final class MyStrategy implements Strategy {
                   priority.put(square, FORWARD_SQUARE_PRIORITY);
                 }
               });
-      movingUnits.keySet().stream().forEach(square -> priority.put(square, MOVING_UNIT_PRIORITY));
+      movingUnits.keySet().forEach(square -> priority.put(square, MOVING_UNIT_PRIORITY));
     }
 
     private void updateWalls() {
@@ -960,22 +958,20 @@ public final class MyStrategy implements Strategy {
                   !brain.isMe(unit)
                       && (brain.isAlly(unit)
                           || unit.getLife() > game.getMagicMissileDirectDamage()))
-          .forEach(unit -> getSquares(unit).stream().forEach(s -> movingUnits.put(s, unit)));
+          .forEach(unit -> getSquares(unit).forEach(s -> movingUnits.put(s, unit)));
 
       if (debug != null && DEBUG_DRAW_MOVING_UNITS) {
         movingUnits
-            .keySet()
-            .stream()
-            .forEach(
-                square -> {
-                  debug.drawRect(
-                      square.getLeftX(),
-                      square.getTopY(),
-                      square.getRightX(),
-                      square.getBottomY(),
-                      Color.orange);
-                  debug.drawBeforeScene();
-                });
+            .keySet().forEach(
+            square -> {
+              debug.drawRect(
+                  square.getLeftX(),
+                  square.getTopY(),
+                  square.getRightX(),
+                  square.getBottomY(),
+                  Color.orange);
+              debug.drawBeforeScene();
+            });
       }
     }
 
@@ -1004,7 +1000,7 @@ public final class MyStrategy implements Strategy {
     public Stream<Square> getSquaresOnLine(Point a, Point b) {
       final Square[] prev = {null};
       return getPointsOnLine(a, b)
-          .map(p -> Square.containing(p))
+          .map(Square::containing)
           .filter(
               square -> {
                 if (square.equals(prev[0])) {
@@ -1578,8 +1574,7 @@ public final class MyStrategy implements Strategy {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       Square square = (Square) o;
-      if (p != square.p) return false;
-      return q == square.q;
+      return p == square.p && q == square.q;
     }
 
     @Override
